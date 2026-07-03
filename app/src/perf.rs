@@ -1,0 +1,131 @@
+/// Performance metrics tracked every frame.
+#[derive(Default, Clone)]
+pub struct PerfOverlay {
+    /// Smoothed frames per second.
+    pub fps: f64,
+    /// Last frame time in milliseconds.
+    pub frame_ms: f64,
+    /// Current memory usage in MiB (RSS).
+    pub memory_mib: f64,
+    /// Number of rows visible in the current viewport.
+    pub visible_rows: usize,
+    /// Last DuckDB query latency in milliseconds.
+    pub query_latency_ms: f64,
+    /// Number of total rows in the active dataset (after filter).
+    pub total_rows: usize,
+    // Internal smoothing state.
+    frame_count: u64,
+    fps_accum: f64,
+}
+
+impl PerfOverlay {
+    pub fn update(&mut self, frame_time_secs: f64) {
+        self.frame_ms = frame_time_secs * 1000.0;
+        self.frame_count += 1;
+        self.fps_accum += 1.0 / frame_time_secs;
+
+        // Smooth FPS over 30 frames.
+        if self.frame_count % 30 == 0 {
+            self.fps = self.fps_accum / 30.0;
+            self.fps_accum = 0.0;
+        }
+
+        // Memory (RSS) via /proc/self/status on Linux, or approximate on macOS.
+        self.memory_mib = Self::current_memory_mib();
+    }
+
+    fn current_memory_mib() -> f64 {
+        // macOS: use `mach_task_basic_info` (simplified approximation via allocated).
+        // For Phase 0, we read from /proc/self/status on Linux or skip on macOS.
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+                for line in status.lines() {
+                    if line.starts_with("VmRSS:") {
+                        let kb: u64 = line
+                            .split_whitespace()
+                            .nth(1)
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0);
+                        return kb as f64 / 1024.0;
+                    }
+                }
+            }
+        }
+        0.0
+    }
+
+    /// Render the overlay as a small floating panel in the top-right.
+    pub fn show(&self, ctx: &egui::Context) {
+        let screen_rect = ctx.screen_rect();
+        let panel_rect = egui::Rect::from_min_size(
+            egui::Pos2::new(screen_rect.right() - 220.0, screen_rect.top() + 40.0),
+            egui::Vec2::new(210.0, 130.0),
+        );
+
+        egui::Area::new(egui::Id::new("perf_overlay"))
+            .fixed_pos(panel_rect.min)
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_premultiplied(10, 10, 18, 210))
+                    .corner_radius(6.0)
+                    .inner_margin(10.0)
+                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 50, 70)))
+                    .show(ui, |ui| {
+                        ui.set_width(190.0);
+                        let label = |ui: &mut egui::Ui, key: &str, val: &str, color: egui::Color32| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    egui::RichText::new(key)
+                                        .color(egui::Color32::from_rgb(120, 120, 150))
+                                        .size(11.0),
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.label(
+                                        egui::RichText::new(val)
+                                            .color(color)
+                                            .monospace()
+                                            .size(11.0),
+                                    );
+                                });
+                            });
+                        };
+
+                        let fps_color = if self.fps >= 55.0 {
+                            egui::Color32::from_rgb(80, 220, 120)
+                        } else if self.fps >= 30.0 {
+                            egui::Color32::from_rgb(220, 180, 60)
+                        } else {
+                            egui::Color32::from_rgb(220, 80, 80)
+                        };
+
+                        label(ui, "FPS", &format!("{:.0}", self.fps), fps_color);
+                        label(ui, "Frame", &format!("{:.2} ms", self.frame_ms), egui::Color32::from_rgb(180, 180, 200));
+                        label(ui, "Memory", &format!("{:.1} MiB", self.memory_mib), egui::Color32::from_rgb(180, 180, 200));
+                        label(ui, "Visible rows", &format!("{}", self.visible_rows), egui::Color32::from_rgb(180, 180, 200));
+                        label(ui, "Total rows", &format!("{}", format_large(self.total_rows)), egui::Color32::from_rgb(180, 180, 200));
+                        label(
+                            ui,
+                            "Query",
+                            &format!("{:.1} ms", self.query_latency_ms),
+                            if self.query_latency_ms < 200.0 {
+                                egui::Color32::from_rgb(80, 220, 120)
+                            } else {
+                                egui::Color32::from_rgb(220, 80, 80)
+                            },
+                        );
+                    });
+            });
+    }
+}
+
+fn format_large(n: usize) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}

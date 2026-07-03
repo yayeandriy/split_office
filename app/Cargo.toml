@@ -1,0 +1,23 @@
+[package]
+name = "app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "split_office"
+path = "src/main.rs"
+
+[dependencies]
+core = { path = "../core" }
+storage = { path = "../storage" }
+query = { path = "../query" }
+grid = { path = "../grid" }
+eframe.workspace = true
+egui.workspace = true
+arrow.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+rfd = "0.15"

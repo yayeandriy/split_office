@@ -1,0 +1,16 @@
+[package]
+name = "query"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+core = { path = "../core" }
+storage = { path = "../storage" }
+duckdb.workspace = true
+arrow.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+polars.workspace = true
+serde.workspace = true
