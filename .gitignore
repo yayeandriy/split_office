@@ -2,6 +2,9 @@
 /target/
 **/*.rs.bk
 
+# Test data
+/test_data/
+
 # IDE
 .vscode/
 .idea/
