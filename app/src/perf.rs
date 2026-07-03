@@ -89,67 +89,30 @@ impl PerfOverlay {
                     .show(ui, |ui| {
                         // Title bar with close button.
                         ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("Performance")
-                                    .color(egui::Color32::from_rgb(140, 140, 170))
-                                    .size(11.0)
-                                    .strong(),
-                            );
+                            ui.label("Performance");
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui
-                                    .small_button(
-                                        egui::RichText::new("×")
-                                            .color(egui::Color32::from_rgb(160, 60, 60)),
-                                    )
-                                    .clicked()
-                                {
+                                if ui.small_button("×").clicked() {
                                     self.visible = false;
                                 }
                             });
                         });
                         ui.separator();
                         ui.set_width(190.0);
-                        let label = |ui: &mut egui::Ui, key: &str, val: &str, color: egui::Color32| {
+                        let label = |ui: &mut egui::Ui, key: &str, val: &str| {
                             ui.horizontal(|ui| {
-                                ui.label(
-                                    egui::RichText::new(key)
-                                        .color(egui::Color32::from_rgb(120, 120, 150))
-                                        .size(11.0),
-                                );
+                                ui.label(key);
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.label(
-                                        egui::RichText::new(val)
-                                            .color(color)
-                                            .monospace()
-                                            .size(11.0),
-                                    );
+                                    ui.label(val);
                                 });
                             });
                         };
 
-                        let fps_color = if self.fps >= 55.0 {
-                            egui::Color32::from_rgb(80, 220, 120)
-                        } else if self.fps >= 30.0 {
-                            egui::Color32::from_rgb(220, 180, 60)
-                        } else {
-                            egui::Color32::from_rgb(220, 80, 80)
-                        };
-
-                        label(ui, "FPS", &format!("{:.0}", self.fps), fps_color);
-                        label(ui, "Frame", &format!("{:.2} ms", self.frame_ms), egui::Color32::from_rgb(180, 180, 200));
-                        label(ui, "Memory", &format!("{:.1} MiB", self.memory_mib), egui::Color32::from_rgb(180, 180, 200));
-                        label(ui, "Visible rows", &format!("{}", self.visible_rows), egui::Color32::from_rgb(180, 180, 200));
-                        label(ui, "Total rows", &format!("{}", format_large(self.total_rows)), egui::Color32::from_rgb(180, 180, 200));
-                        label(
-                            ui,
-                            "Query",
-                            &format!("{:.1} ms", self.query_latency_ms),
-                            if self.query_latency_ms < 200.0 {
-                                egui::Color32::from_rgb(80, 220, 120)
-                            } else {
-                                egui::Color32::from_rgb(220, 80, 80)
-                            },
-                        );
+                        label(ui, "FPS", &format!("{:.0}", self.fps));
+                        label(ui, "Frame", &format!("{:.2} ms", self.frame_ms));
+                        label(ui, "Memory", &format!("{:.1} MiB", self.memory_mib));
+                        label(ui, "Visible rows", &format!("{}", self.visible_rows));
+                        label(ui, "Total rows", &format!("{}", format_large(self.total_rows)));
+                        label(ui, "Query", &format!("{:.1} ms", self.query_latency_ms));
                     });
             });
     }

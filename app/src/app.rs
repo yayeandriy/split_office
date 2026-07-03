@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use arrow::record_batch::RecordBatch;
-use egui::{Color32, Context, RichText, Ui};
+use egui::{Context, Ui};
 use tracing::{error, info};
 
 use core::{FilterExpr, SortSpec, Viewport};
@@ -348,16 +348,12 @@ impl SplitOfficeApp {
             }
 
             if let Some(h) = &self.handle {
-                ui.label(
-                    RichText::new(format!(
-                        "{} · {} rows · {} cols",
-                        h.dataset.name,
-                        fmt_large(h.dataset.row_count),
-                        h.dataset.schema.column_count()
-                    ))
-                    .size(12.0)
-                    .color(Color32::from_rgb(160, 160, 190)),
-                );
+                ui.label(format!(
+                    "{} · {} rows · {} cols",
+                    h.dataset.name,
+                    fmt_large(h.dataset.row_count),
+                    h.dataset.schema.column_count()
+                ));
             }
 
             if self.loading {
@@ -368,19 +364,16 @@ impl SplitOfficeApp {
 
     fn show_status_bar(&self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(&self.status_message)
-                    .size(11.0)
-                    .color(Color32::from_rgb(140, 140, 170)),
-            );
+            ui.label(&self.status_message);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if self.grid_state.has_active_filters() {
                     let count = self.grid_state.column_filters.len();
-                    ui.label(
-                        RichText::new(format!("Filtering {} col{} · Showing {} rows", count, if count > 1 { "s" } else { "" }, fmt_large(self.total_rows)))
-                            .size(11.0)
-                            .color(Color32::from_rgb(100, 180, 100)),
-                    );
+                    ui.label(format!(
+                        "Filtering {} col{} · Showing {} rows",
+                        count,
+                        if count > 1 { "s" } else { "" },
+                        fmt_large(self.total_rows)
+                    ));
                     ui.separator();
                 }
                 if !self.grid_state.sort_specs.is_empty() {
@@ -390,11 +383,7 @@ impl SplitOfficeApp {
                         .iter()
                         .map(|s| format!("{} {}", s.column, s.direction.arrow_label()))
                         .collect();
-                    ui.label(
-                        RichText::new(format!("Sorted: {}", labels.join(", ")))
-                            .size(11.0)
-                            .color(Color32::from_rgb(100, 160, 220)),
-                    );
+                    ui.label(format!("Sorted: {}", labels.join(", ")));
                 }
             });
         });
@@ -473,11 +462,7 @@ impl eframe::App for SplitOfficeApp {
                         panels::quality_panel(ui, profile);
                     }
                 } else {
-                    ui.label(
-                        RichText::new("No dataset loaded")
-                            .color(Color32::from_rgb(100, 100, 130))
-                            .size(12.0),
-                    );
+                    ui.label("No dataset loaded");
                 }
             });
 
@@ -521,7 +506,7 @@ impl eframe::App for SplitOfficeApp {
                             ui.add_space(40.0);
                             ui.spinner();
                             ui.add_space(8.0);
-                            ui.label(RichText::new("Loading dataset…").size(14.0));
+                            ui.label("Loading dataset…");
                         });
                     });
                 }
@@ -530,30 +515,13 @@ impl eframe::App for SplitOfficeApp {
                 ui.centered_and_justified(|ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(60.0);
-                        ui.label(
-                            RichText::new("Split Office")
-                                .size(36.0)
-                                .strong()
-                                .color(Color32::from_rgb(180, 180, 220)),
-                        );
+                        ui.heading("Split Office");
                         ui.add_space(6.0);
-                        ui.label(
-                            RichText::new("Research Prototype · Phase 0")
-                                .size(13.0)
-                                .color(Color32::from_rgb(100, 100, 140)),
-                        );
+                        ui.label("Research Prototype");
                         ui.add_space(50.0);
-                        ui.label(
-                            RichText::new("▶  Drop a Parquet or CSV file here")
-                                .size(18.0)
-                                .color(Color32::from_rgb(140, 140, 180)),
-                        );
+                        ui.label("▶  Drop a Parquet or CSV file here");
                         ui.add_space(10.0);
-                        ui.label(
-                            RichText::new("or click Open File above")
-                                .size(12.0)
-                                .color(Color32::from_rgb(90, 90, 130)),
-                        );
+                        ui.label("or click Open File above");
                     });
                 });
             }
