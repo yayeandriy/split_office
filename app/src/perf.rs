@@ -98,7 +98,7 @@ impl PerfOverlay {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 if ui
                                     .small_button(
-                                        egui::RichText::new("✕")
+                                        egui::RichText::new("×")
                                             .color(egui::Color32::from_rgb(160, 60, 60)),
                                     )
                                     .clicked()

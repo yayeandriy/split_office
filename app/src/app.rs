@@ -340,7 +340,7 @@ impl SplitOfficeApp {
             }
 
             if self.grid_state.has_active_filters() {
-                if ui.button("✕  Clear Filters").clicked() {
+                if ui.button("×  Clear Filters").clicked() {
                     self.grid_state.column_filters.clear();
                     self.apply_filter();
                 }
