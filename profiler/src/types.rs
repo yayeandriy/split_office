@@ -35,16 +35,18 @@ impl SemanticType {
         }
     }
 
-    pub fn icon(&self) -> &'static str {
+    /// Short ASCII-safe icon label for this semantic type.
+    /// The UI layer renders this with appropriate icon fonts.
+    pub fn icon_label(&self) -> &'static str {
         match self {
-            SemanticType::Identifier => "🔑",
-            SemanticType::Measure => "📊",
-            SemanticType::Temporal => "📅",
-            SemanticType::Category => "🏷️",
-            SemanticType::Geographic => "🌍",
+            SemanticType::Identifier => "◈",
+            SemanticType::Measure => "▤",
+            SemanticType::Temporal => "◷",
+            SemanticType::Category => "▥",
+            SemanticType::Geographic => "◎",
             SemanticType::Boolean => "✓",
-            SemanticType::Text => "📝",
-            SemanticType::Unknown => "❓",
+            SemanticType::Text => "≡",
+            SemanticType::Unknown => "?",
         }
     }
 }

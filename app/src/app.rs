@@ -317,7 +317,7 @@ impl SplitOfficeApp {
 
     fn show_toolbar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            if ui.button("📂  Open File").clicked() {
+            if ui.button("▶  Open File").clicked() {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("Data Files", &["parquet", "csv"])
                     .pick_file()
@@ -329,7 +329,7 @@ impl SplitOfficeApp {
             ui.separator();
 
             if !self.grid_state.sort_specs.is_empty() {
-                if ui.button("🔄  Clear Sorts").clicked() {
+                if ui.button("↻  Clear Sorts").clicked() {
                     self.grid_state.clear_sorts();
                     self.sort.clear();
                     self.viewport.first_row = 0;
@@ -544,7 +544,7 @@ impl eframe::App for SplitOfficeApp {
                         );
                         ui.add_space(50.0);
                         ui.label(
-                            RichText::new("📂  Drop a Parquet or CSV file here")
+                            RichText::new("▶  Drop a Parquet or CSV file here")
                                 .size(18.0)
                                 .color(Color32::from_rgb(140, 140, 180)),
                         );

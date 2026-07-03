@@ -3,8 +3,23 @@
 use egui::{Color32, RichText, Ui};
 
 use core::Dataset;
-use profiler::{ColumnProfile, DatasetProfile};
+use profiler::{ColumnProfile, DatasetProfile, SemanticType};
 use query::stats::ColumnStats;
+
+/// Map a SemanticType to a Unicode icon that renders in SF Pro / standard fonts.
+/// Uses Geometric Shapes (U+25A0–U+25FF) and Misc Symbols (U+2700–U+27BF).
+fn semantic_icon(st: &SemanticType) -> &'static str {
+    match st {
+        SemanticType::Identifier => "◆",  // U+25C6 diamond
+        SemanticType::Measure => "●",      // U+25CF filled circle
+        SemanticType::Temporal => "◷",     // U+25F7 clock-like
+        SemanticType::Category => "▥",     // U+25A5 square with vertical fill
+        SemanticType::Geographic => "◎",   // U+25CE bullseye
+        SemanticType::Boolean => "✓",      // U+2713 checkmark
+        SemanticType::Text => "≡",         // U+2261 identical to
+        SemanticType::Unknown => "?",
+    }
+}
 
 /// Left panel: dataset schema overview with semantic types from profiler.
 pub fn schema_panel(ui: &mut Ui, dataset: &Dataset, profile: Option<&DatasetProfile>) {
@@ -56,8 +71,8 @@ pub fn schema_panel(ui: &mut Ui, dataset: &Dataset, profile: Option<&DatasetProf
                     // Semantic type icon if available.
                     if let Some(cp) = col_profile {
                         ui.label(
-                            RichText::new(cp.semantic_type.icon())
-                                .size(10.0),
+                            RichText::new(semantic_icon(&cp.semantic_type))
+                                .size(11.0),
                         );
                     }
 
@@ -139,7 +154,7 @@ pub fn column_inspector(
                 .id_salt("inspector_scroll")
                 .show(ui, |ui| {
                     if let Some(st) = semantic {
-                        stat_row(ui, "Type", &format!("{} {}", st.icon(), st.label()));
+                        stat_row(ui, "Type", &format!("{} {}", semantic_icon(st), st.label()));
                     }
 
                     if let Some(p) = profile {

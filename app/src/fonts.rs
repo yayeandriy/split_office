@@ -21,6 +21,7 @@ const SFNS_MONO_ITALIC: &str = "/System/Library/Fonts/SFNSMonoItalic.ttf";
 ///
 /// If any font file is missing (non-macOS or SF Pro not installed),
 /// returns `None` and egui will use its built-in font.
+/// Phosphor icons are always registered.
 pub fn sf_pro_fonts() -> Option<FontDefinitions> {
     // Quick availability check — if the primary file is missing, bail out.
     if !std::path::Path::new(SF_PRO_TEXT_REGULAR).exists() {
