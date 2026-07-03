@@ -3,6 +3,7 @@ members = [
     "app",
     "core",
     "grid",
+    "profiler",
     "query",
     "storage",
     "benchmark",

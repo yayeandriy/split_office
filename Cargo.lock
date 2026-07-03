@@ -142,6 +142,8 @@ dependencies = [
  "egui",
  "grid",
  "parking_lot",
+ "polars",
+ "profiler",
  "query",
  "rfd",
  "serde",
@@ -3971,6 +3973,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "profiler"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arrow",
+ "core",
+ "parking_lot",
+ "polars",
+ "serde",
+ "storage",
+ "tracing",
 ]
 
 [[package]]

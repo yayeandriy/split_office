@@ -9,6 +9,7 @@ use tracing::{error, info};
 
 use core::{FilterExpr, SortSpec, Viewport};
 use grid::{GridAction, GridRenderer, GridState};
+use profiler::DatasetProfile;
 use query::stats::DatasetStats;
 use query::{QueryEngine, QueryParams};
 use storage::DatasetHandle;
@@ -26,6 +27,7 @@ enum BgMessage {
     },
     RowCount(usize),
     StatsReady(DatasetStats),
+    ProfileReady(DatasetProfile),
     Error(String),
 }
 
@@ -38,6 +40,7 @@ pub struct SplitOfficeApp {
     handle: Option<DatasetHandle>,
     engine: Option<Arc<QueryEngine>>,
     dataset_stats: Option<DatasetStats>,
+    profile: Option<DatasetProfile>,
 
     filter_expr: FilterExpr,
     sort: Vec<SortSpec>,
@@ -64,6 +67,7 @@ impl SplitOfficeApp {
             handle: None,
             engine: None,
             dataset_stats: None,
+            profile: None,
             filter_expr: FilterExpr::None,
             sort: Vec::new(),
             viewport: Viewport::default(),
@@ -145,6 +149,39 @@ impl SplitOfficeApp {
         });
     }
 
+    fn start_profiling(&self) {
+        let handle = match &self.handle { Some(h) => h.clone(), None => return };
+        let tx = self.tx.clone();
+        let dataset_name = handle.dataset.name.clone();
+        std::thread::spawn(move || {
+            let path = handle
+                .parquet_path
+                .to_str()
+                .unwrap_or("unknown");
+            match polars::prelude::LazyFrame::scan_parquet(
+                path,
+                polars::prelude::ScanArgsParquet::default(),
+            ) {
+                Ok(lf) => match lf.collect() {
+                    Ok(df) => match profiler::profile_dataframe(&df, &dataset_name) {
+                        Ok(profile) => {
+                            let _ = tx.send(BgMessage::ProfileReady(profile));
+                        }
+                        Err(e) => {
+                            let _ = tx.send(BgMessage::Error(format!("Profiling: {e}")));
+                        }
+                    },
+                    Err(e) => {
+                        let _ = tx.send(BgMessage::Error(format!("Polars collect: {e}")));
+                    }
+                },
+                Err(e) => {
+                    let _ = tx.send(BgMessage::Error(format!("Polars scan: {e}")));
+                }
+            }
+        });
+    }
+
     // ── Message drain ─────────────────────────────────────────────────────────
 
     fn drain_messages(&mut self) {
@@ -160,6 +197,7 @@ impl SplitOfficeApp {
                     self.filter_expr = FilterExpr::None;
                     self.current_batch = None;
                     self.dataset_stats = None;
+                    self.profile = None;
 
                     match QueryEngine::open(&handle) {
                         Ok(engine) => {
@@ -173,6 +211,7 @@ impl SplitOfficeApp {
                             self.handle = Some(*handle);
                             self.fetch_page();
                             self.fetch_stats();
+                            self.start_profiling();
                         }
                         Err(e) => {
                             self.status_message = format!("Engine error: {e}");
@@ -192,6 +231,11 @@ impl SplitOfficeApp {
 
                 BgMessage::StatsReady(stats) => {
                     self.dataset_stats = Some(stats);
+                }
+
+                BgMessage::ProfileReady(profile) => {
+                    info!(cols = profile.column_count, "profile ready");
+                    self.profile = Some(profile);
                 }
 
                 BgMessage::Error(e) => {
@@ -400,11 +444,14 @@ impl eframe::App for SplitOfficeApp {
         // Left panel: schema.
         egui::SidePanel::left("schema_panel")
             .resizable(true)
-            .min_width(150.0)
-            .default_width(200.0)
+            .min_width(160.0)
+            .default_width(220.0)
             .show(ctx, |ui| {
                 if let Some(handle) = &self.handle {
-                    panels::schema_panel(ui, &handle.dataset);
+                    panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
+                    if let Some(ref profile) = self.profile {
+                        panels::quality_panel(ui, profile);
+                    }
                 } else {
                     ui.label(
                         RichText::new("No dataset loaded")
@@ -417,8 +464,8 @@ impl eframe::App for SplitOfficeApp {
         // Right panel: column inspector.
         egui::SidePanel::right("inspector_panel")
             .resizable(true)
-            .min_width(170.0)
-            .default_width(210.0)
+            .min_width(180.0)
+            .default_width(230.0)
             .show(ctx, |ui| {
                 let col_stats = self.inspected_col.as_ref().and_then(|name| {
                     self.dataset_stats
@@ -427,7 +474,10 @@ impl eframe::App for SplitOfficeApp {
                         .iter()
                         .find(|c| &c.name == name)
                 });
-                panels::column_inspector(ui, col_stats);
+                let col_profile = self.inspected_col.as_ref().and_then(|name| {
+                    self.profile.as_ref()?.column(name)
+                });
+                panels::column_inspector(ui, col_stats, col_profile);
             });
 
         // Central panel: grid.
