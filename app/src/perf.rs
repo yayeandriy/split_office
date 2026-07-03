@@ -13,12 +13,21 @@ pub struct PerfOverlay {
     pub query_latency_ms: f64,
     /// Number of total rows in the active dataset (after filter).
     pub total_rows: usize,
+    /// Whether the overlay is visible.
+    pub visible: bool,
     // Internal smoothing state.
     frame_count: u64,
     fps_accum: f64,
 }
 
 impl PerfOverlay {
+    pub fn new() -> Self {
+        Self {
+            visible: true,
+            ..Default::default()
+        }
+    }
+
     pub fn update(&mut self, frame_time_secs: f64) {
         self.frame_ms = frame_time_secs * 1000.0;
         self.frame_count += 1;
@@ -56,16 +65,21 @@ impl PerfOverlay {
     }
 
     /// Render the overlay as a small floating panel in the top-right.
-    pub fn show(&self, ctx: &egui::Context) {
+    pub fn show(&mut self, ctx: &egui::Context) {
+        if !self.visible {
+            return;
+        }
+
         let screen_rect = ctx.screen_rect();
         let panel_rect = egui::Rect::from_min_size(
             egui::Pos2::new(screen_rect.right() - 220.0, screen_rect.top() + 40.0),
-            egui::Vec2::new(210.0, 130.0),
+            egui::Vec2::new(210.0, 150.0),
         );
 
         egui::Area::new(egui::Id::new("perf_overlay"))
             .fixed_pos(panel_rect.min)
             .order(egui::Order::Foreground)
+            .movable(true)
             .show(ctx, |ui| {
                 egui::Frame::new()
                     .fill(egui::Color32::from_rgba_premultiplied(10, 10, 18, 210))
@@ -73,6 +87,26 @@ impl PerfOverlay {
                     .inner_margin(10.0)
                     .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 50, 70)))
                     .show(ui, |ui| {
+                        // Title bar with close button.
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new("Performance")
+                                    .color(egui::Color32::from_rgb(140, 140, 170))
+                                    .size(11.0)
+                                    .strong(),
+                            );
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui
+                                    .small_button(
+                                        egui::RichText::new("✕").color(egui::Color32::from_rgb(160, 60, 60)),
+                                    )
+                                    .clicked()
+                                {
+                                    self.visible = false;
+                                }
+                            });
+                        });
+                        ui.separator();
                         ui.set_width(190.0);
                         let label = |ui: &mut egui::Ui, key: &str, val: &str, color: egui::Color32| {
                             ui.horizontal(|ui| {

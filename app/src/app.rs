@@ -75,7 +75,7 @@ impl SplitOfficeApp {
             grid_state: GridState::new(),
             current_batch: None,
             inspected_col: None,
-            perf: PerfOverlay::default(),
+            perf: PerfOverlay::new(),
             last_frame: Instant::now(),
             loading: false,
             status_message: "Drop a Parquet or CSV file to open it.".to_string(),
@@ -424,6 +424,26 @@ impl eframe::App for SplitOfficeApp {
                 }
             }
         });
+
+        // Menu bar.
+        egui::TopBottomPanel::top("menu_bar")
+            .min_height(22.0)
+            .show(ctx, |ui| {
+                egui::menu::bar(ui, |ui| {
+                    ui.menu_button("View", |ui| {
+                        if ui
+                            .add(egui::SelectableLabel::new(
+                                self.perf.visible,
+                                "Performance Overlay",
+                            ))
+                            .clicked()
+                        {
+                            self.perf.visible = !self.perf.visible;
+                            ui.close_menu();
+                        }
+                    });
+                });
+            });
 
         // Top toolbar.
         egui::TopBottomPanel::top("toolbar")
