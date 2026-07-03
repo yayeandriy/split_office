@@ -14,6 +14,7 @@ use query::stats::DatasetStats;
 use query::{QueryEngine, QueryParams};
 use storage::DatasetHandle;
 
+use crate::label;
 use crate::panels;
 use crate::perf::PerfOverlay;
 
@@ -348,7 +349,7 @@ impl SplitOfficeApp {
             }
 
             if let Some(h) = &self.handle {
-                ui.label(format!(
+                label::text(ui, format!(
                     "{} · {} rows · {} cols",
                     h.dataset.name,
                     fmt_large(h.dataset.row_count),
@@ -364,11 +365,11 @@ impl SplitOfficeApp {
 
     fn show_status_bar(&self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.label(&self.status_message);
+            label::text(ui, &self.status_message);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if self.grid_state.has_active_filters() {
                     let count = self.grid_state.column_filters.len();
-                    ui.label(format!(
+                    label::text(ui, format!(
                         "Filtering {} col{} · Showing {} rows",
                         count,
                         if count > 1 { "s" } else { "" },
@@ -383,7 +384,7 @@ impl SplitOfficeApp {
                         .iter()
                         .map(|s| format!("{} {}", s.column, s.direction.arrow_label()))
                         .collect();
-                    ui.label(format!("Sorted: {}", labels.join(", ")));
+                    label::text(ui, format!("Sorted: {}", labels.join(", ")));
                 }
             });
         });
@@ -462,7 +463,7 @@ impl eframe::App for SplitOfficeApp {
                         panels::quality_panel(ui, profile);
                     }
                 } else {
-                    ui.label("No dataset loaded");
+                    label::text(ui, "No dataset loaded");
                 }
             });
 
@@ -506,7 +507,7 @@ impl eframe::App for SplitOfficeApp {
                             ui.add_space(40.0);
                             ui.spinner();
                             ui.add_space(8.0);
-                            ui.label("Loading dataset…");
+                            label::text(ui, "Loading dataset…");
                         });
                     });
                 }
@@ -515,13 +516,11 @@ impl eframe::App for SplitOfficeApp {
                 ui.centered_and_justified(|ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(60.0);
-                        ui.heading("Split Office");
-                        ui.add_space(6.0);
-                        ui.label("Research Prototype");
-                        ui.add_space(50.0);
-                        ui.label("▶  Drop a Parquet or CSV file here");
-                        ui.add_space(10.0);
-                        ui.label("or click Open File above");
+                        label::text(ui, "Split Office");
+                        label::text(ui, "Research Prototype");
+                        ui.add_space(20.0);
+                        label::text(ui, "▶  Drop a Parquet or CSV file here");
+                        label::text(ui, "or click Open File above");
                     });
                 });
             }

@@ -1,7 +1,8 @@
 //! Side-panel UI components: schema inspector, column stats, dataset overview.
 
-use egui::{RichText, Ui};
+use egui::Ui;
 
+use crate::label;
 use core::Dataset;
 use profiler::{ColumnProfile, DatasetProfile, SemanticType};
 use query::stats::ColumnStats;
@@ -22,8 +23,8 @@ fn semantic_icon(st: &SemanticType) -> &'static str {
 
 /// Left panel: dataset schema overview with semantic types from profiler.
 pub fn schema_panel(ui: &mut Ui, dataset: &Dataset, profile: Option<&DatasetProfile>) {
-    ui.heading(&dataset.name);
-    ui.label(format!(
+    label::text(ui, &dataset.name);
+    label::text(ui, format!(
         "{} rows · {} columns",
         format_large(dataset.row_count),
         dataset.schema.column_count()
@@ -31,19 +32,18 @@ pub fn schema_panel(ui: &mut Ui, dataset: &Dataset, profile: Option<&DatasetProf
 
     if let Some(p) = profile {
         let score = p.quality.score;
-        let label = if score > 0.8 {
+        let label_str = if score > 0.8 {
             "Excellent"
         } else if score > 0.6 {
             "Good"
         } else {
             "Needs attention"
         };
-        ui.label(format!("Quality: {:.0}% · {}", score * 100.0, label));
+        label::text(ui, format!("Quality: {:.0}% · {}", score * 100.0, label_str));
     }
 
     ui.separator();
-    ui.label(RichText::new("Schema").strong());
-    ui.add_space(4.0);
+    label::section(ui, "Schema");
 
     egui::ScrollArea::vertical()
         .id_salt("schema_scroll")
@@ -52,17 +52,17 @@ pub fn schema_panel(ui: &mut Ui, dataset: &Dataset, profile: Option<&DatasetProf
                 let col_profile = profile.and_then(|p| p.column(&col.name));
 
                 ui.horizontal(|ui| {
-                    ui.label(format!("{:>3}", i + 1));
+                    label::text(ui, format!("{:>3}", i + 1));
 
                     if let Some(cp) = col_profile {
-                        ui.label(semantic_icon(&cp.semantic_type));
+                        label::text(ui, semantic_icon(&cp.semantic_type));
                     }
 
-                    ui.label(&col.name);
+                    label::text(ui, &col.name);
 
                     if let Some(cp) = col_profile {
                         if cp.null_pct > 0.0 {
-                            ui.label(cp.null_bar());
+                            label::text(ui, cp.null_bar());
                         }
                     }
 
@@ -72,7 +72,7 @@ pub fn schema_panel(ui: &mut Ui, dataset: &Dataset, profile: Option<&DatasetProf
                         } else {
                             col.dtype.label().to_string()
                         };
-                        ui.label(type_str);
+                        label::text(ui, type_str);
                     });
                 });
 
@@ -80,7 +80,7 @@ pub fn schema_panel(ui: &mut Ui, dataset: &Dataset, profile: Option<&DatasetProf
                     if let Some(ref dist) = cp.distribution {
                         let spark = dist.sparkline();
                         if !spark.is_empty() {
-                            ui.label(&spark);
+                            label::text(ui, &spark);
                         }
                     }
                 }
@@ -96,12 +96,11 @@ pub fn column_inspector(
     col_stats: Option<&ColumnStats>,
     col_profile: Option<&ColumnProfile>,
 ) {
-    ui.heading("Column Inspector");
-    ui.separator();
+    label::section(ui, "Column Inspector");
 
     match (col_stats, col_profile) {
         (None, None) => {
-            ui.label("Click a column header to inspect.");
+            label::text(ui, "Click a column header to inspect.");
         }
         (stats, profile) => {
             let _name = stats
@@ -126,12 +125,7 @@ pub fn column_inspector(
                     stat_row(ui, "Count", &profile.map_or("?".into(), |p| format_large(p.count)));
                     if let Some(p) = profile {
                         stat_row(ui, "Nulls", &format!("{} ({:.1}%)", p.null_count, p.null_pct * 100.0));
-                        ui.horizontal(|ui| {
-                            ui.label("Completeness");
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(p.null_bar());
-                            });
-                        });
+                        stat_row(ui, "Completeness", &p.null_bar());
                         stat_row(ui, "Unique", &format!("{} ({:.1}%)", p.unique_count, p.unique_pct * 100.0));
                     } else if let Some(s) = stats {
                         stat_row(ui, "Nulls", &s.null_count.to_string());
@@ -192,7 +186,7 @@ pub fn column_inspector(
                     if let Some(p) = profile {
                         if !p.top_correlations.is_empty() {
                             ui.separator();
-                            ui.label(RichText::new("Top Correlations").strong());
+                            label::section(ui, "Top Correlations");
                             for (col, coeff) in &p.top_correlations {
                                 stat_row(ui, col, &format!("{coeff:+.3}"));
                             }
@@ -208,22 +202,22 @@ pub fn quality_panel(ui: &mut Ui, profile: &DatasetProfile) {
     let q = &profile.quality;
     if !q.issues.is_empty() {
         ui.separator();
-        ui.label(format!("{} issues found", q.issues.len()));
+        label::text(ui, format!("{} issues found", q.issues.len()));
         for issue in &q.issues {
-            ui.label(format!("• {}", issue));
+            label::text(ui, format!("• {}", issue));
         }
     }
 
     if !profile.relationships.is_empty() {
         ui.separator();
-        ui.label(RichText::new("Relationships").strong());
+        label::section(ui, "Relationships");
         for rel in &profile.relationships {
             let kind_str = match rel.kind {
                 profiler::RelationshipKind::ForeignKey => "FK",
                 profiler::RelationshipKind::Hierarchy => "Hierarchy",
                 profiler::RelationshipKind::Repeated => "Repeated",
             };
-            ui.label(format!(
+            label::text(ui, format!(
                 "{} → {} ({}, {:.0}%)",
                 rel.from_column, rel.to_column, kind_str, rel.confidence * 100.0
             ));
@@ -233,9 +227,9 @@ pub fn quality_panel(ui: &mut Ui, profile: &DatasetProfile) {
 
 fn stat_row(ui: &mut Ui, key: &str, value: &str) {
     ui.horizontal(|ui| {
-        ui.label(key);
+        label::text(ui, key);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(value);
+            label::text(ui, value);
         });
     });
 }
