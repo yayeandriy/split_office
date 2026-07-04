@@ -12,6 +12,19 @@ impl std::fmt::Display for DatasetId {
     }
 }
 
+/// Opaque handle for a column within a dataset.
+///
+/// Prefer this over raw `String` column names when passing columns through
+/// the application layer (constitution §Strong Types).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ColumnId(pub u64);
+
+impl std::fmt::Display for ColumnId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Col({})", self.0)
+    }
+}
+
 /// A single column in a dataset schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Column {
@@ -43,6 +56,13 @@ impl Schema {
 
     pub fn column_names(&self) -> Vec<&str> {
         self.columns.iter().map(|c| c.name.as_str()).collect()
+    }
+
+    /// Look up a column by name.
+    ///
+    /// Prefer this over `iter().find(|c| c.name == name)` at call sites.
+    pub fn column_by_name(&self, name: &str) -> Option<&Column> {
+        self.columns.iter().find(|c| c.name == name)
     }
 }
 

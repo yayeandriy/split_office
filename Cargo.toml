@@ -6,6 +6,7 @@ members = [
     "profiler",
     "query",
     "storage",
+    "workflow",
     "benchmark",
 ]
 resolver = "2"

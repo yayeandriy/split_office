@@ -55,8 +55,7 @@ pub fn format_cell(batch: &RecordBatch, col: usize, row: usize) -> String {
             let arr = array.as_any().downcast_ref::<Date32Array>().unwrap();
             // Days since epoch → ISO date string.
             let days = arr.value(row);
-            let epoch = chrono_days_to_date(days);
-            epoch
+            chrono_days_to_date(days)
         }
         _ => format!("{:?}", array.data_type()),
     }

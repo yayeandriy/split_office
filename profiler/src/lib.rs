@@ -36,6 +36,31 @@ pub mod types;
 pub use profile::profile_dataframe;
 pub use types::*;
 
+/// Load a Parquet file with Polars and run a full dataset profile.
+///
+/// This is the **primary entry point** for the Application layer.
+/// It encapsulates all Polars IO so that no other crate (especially `app`)
+/// needs to touch `polars::prelude::LazyFrame` directly.
+///
+/// # Errors
+/// Returns an error if the file cannot be opened, parsed, or profiled.
+pub fn profile_from_parquet(
+    path: &str,
+    dataset_name: &str,
+) -> anyhow::Result<DatasetProfile> {
+    use polars::prelude::{LazyFrame, ScanArgsParquet};
+
+    let lf = LazyFrame::scan_parquet(path, ScanArgsParquet::default())
+        .map_err(|e| anyhow::anyhow!("Polars scan: {e}"))?;
+
+    let df = lf
+        .collect()
+        .map_err(|e| anyhow::anyhow!("Polars collect: {e}"))?;
+
+    profile_dataframe(&df, dataset_name)
+        .map_err(|e| anyhow::anyhow!("Profiling: {e}"))
+}
+
 use core::DataType;
 
 /// Convert a Polars DataType to core::DataType.

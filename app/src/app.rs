@@ -7,16 +7,21 @@ use arrow::record_batch::RecordBatch;
 use egui::{Context, Ui};
 use tracing::{error, info};
 
-use core::{FilterExpr, SortSpec, Viewport};
+use core::{fmt_large, FilterExpr, Viewport};
 use grid::{GridAction, GridRenderer, GridState};
 use profiler::DatasetProfile;
 use query::stats::DatasetStats;
 use query::{QueryEngine, QueryParams};
 use storage::DatasetHandle;
+use workflow::{
+    build_filter, build_query_params, LinearWorkflowIds,
+    NodePayload, WorkflowBuilder, WorkflowGraph,
+};
 
 use crate::label;
 use crate::panels;
 use crate::perf::PerfOverlay;
+use crate::workflow_sidebar;
 
 // ── Background messages ───────────────────────────────────────────────────────
 
@@ -43,8 +48,13 @@ pub struct SplitOfficeApp {
     dataset_stats: Option<DatasetStats>,
     profile: Option<DatasetProfile>,
 
-    filter_expr: FilterExpr,
-    sort: Vec<SortSpec>,
+    // ── DAG workflow (spec §DAG-First Architecture) ────────────────────────
+    //
+    // All filter and sort state lives in the graph. The app never holds
+    // raw `FilterExpr` or `Vec<SortSpec>` directly.
+    workflow: WorkflowGraph,
+    workflow_ids: Option<LinearWorkflowIds>,
+
     viewport: Viewport,
     total_rows: usize,
 
@@ -62,6 +72,8 @@ pub struct SplitOfficeApp {
 impl SplitOfficeApp {
     pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let (tx, rx) = channel();
+        // Bootstrap an empty workflow graph (no dataset yet).
+        // It will be rebuilt when a dataset is loaded.
         Self {
             rx,
             tx,
@@ -69,8 +81,8 @@ impl SplitOfficeApp {
             engine: None,
             dataset_stats: None,
             profile: None,
-            filter_expr: FilterExpr::None,
-            sort: Vec::new(),
+            workflow: WorkflowGraph::new(),
+            workflow_ids: None,
             viewport: Viewport::default(),
             total_rows: 0,
             grid_state: GridState::new(),
@@ -110,11 +122,22 @@ impl SplitOfficeApp {
             Some(e) => Arc::clone(e),
             None => return,
         };
-        let params = QueryParams {
-            filter: self.filter_expr.clone(),
-            sort: self.sort.clone(),
-            viewport: self.viewport,
+
+        // Build QueryParams from the workflow DAG.
+        let params = if let Some(_ids) = &self.workflow_ids {
+            let plan = self.workflow.execution_plan().unwrap_or_else(|_| {
+                workflow::ExecutionPlan { steps: vec![] }
+            });
+            let wp = build_query_params(&self.workflow, &plan, self.viewport);
+            QueryParams {
+                filter: wp.filter,
+                sort: wp.sort,
+                viewport: wp.viewport,
+            }
+        } else {
+            QueryParams::new(self.viewport)
         };
+
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             let t0 = Instant::now();
@@ -133,7 +156,15 @@ impl SplitOfficeApp {
             Some(e) => Arc::clone(e),
             None => return,
         };
-        let filter = self.filter_expr.clone();
+        // Extract the current filter from the workflow graph.
+        let filter = if let Some(_ids) = &self.workflow_ids {
+            let plan = self.workflow.execution_plan().unwrap_or_else(|_| {
+                workflow::ExecutionPlan { steps: vec![] }
+            });
+            build_filter(&self.workflow, &plan)
+        } else {
+            FilterExpr::None
+        };
         let tx = self.tx.clone();
         std::thread::spawn(move || match engine.count_rows(&filter) {
             Ok(n) => { let _ = tx.send(BgMessage::RowCount(n)); }
@@ -155,29 +186,14 @@ impl SplitOfficeApp {
         let tx = self.tx.clone();
         let dataset_name = handle.dataset.name.clone();
         std::thread::spawn(move || {
-            let path = handle
-                .parquet_path
-                .to_str()
-                .unwrap_or("unknown");
-            match polars::prelude::LazyFrame::scan_parquet(
-                path,
-                polars::prelude::ScanArgsParquet::default(),
-            ) {
-                Ok(lf) => match lf.collect() {
-                    Ok(df) => match profiler::profile_dataframe(&df, &dataset_name) {
-                        Ok(profile) => {
-                            let _ = tx.send(BgMessage::ProfileReady(profile));
-                        }
-                        Err(e) => {
-                            let _ = tx.send(BgMessage::Error(format!("Profiling: {e}")));
-                        }
-                    },
-                    Err(e) => {
-                        let _ = tx.send(BgMessage::Error(format!("Polars collect: {e}")));
-                    }
-                },
+            // ── Profiler context owns all Polars IO (constitution §Bounded Contexts) ──
+            let path = handle.parquet_path.to_str().unwrap_or("unknown").to_string();
+            match profiler::profile_from_parquet(&path, &dataset_name) {
+                Ok(profile) => {
+                    let _ = tx.send(BgMessage::ProfileReady(profile));
+                }
                 Err(e) => {
-                    let _ = tx.send(BgMessage::Error(format!("Polars scan: {e}")));
+                    let _ = tx.send(BgMessage::Error(e.to_string()));
                 }
             }
         });
@@ -194,11 +210,22 @@ impl SplitOfficeApp {
                     self.total_rows = handle.dataset.row_count;
                     self.viewport = Viewport::new(0, 50);
                     self.grid_state = GridState::new();
-                    self.sort.clear();
-                    self.filter_expr = FilterExpr::None;
                     self.current_batch = None;
                     self.dataset_stats = None;
                     self.profile = None;
+
+                    // ── Bootstrap a fresh workflow graph for the new dataset ──────
+                    //
+                    // The graph starts as Dataset → Filter → Sort with all
+                    // parameters at their defaults (no filter, no sort).
+                    // The app layer only ever mutates node payloads via
+                    // `workflow.update_payload(id, ...)` — never raw fields.
+                    let (graph, ids) = WorkflowBuilder::new(handle.dataset.id)
+                        .filter(FilterExpr::None)
+                        .sort(vec![])
+                        .build();
+                    self.workflow = graph;
+                    self.workflow_ids = Some(ids);
 
                     match QueryEngine::open(&handle) {
                         Ok(engine) => {
@@ -255,7 +282,19 @@ impl SplitOfficeApp {
             match action {
                 GridAction::SortRequested { column, shift_held } => {
                     self.grid_state.toggle_sort(&column, shift_held);
-                    self.sort = self.grid_state.sort_specs.clone();
+
+                    // Update the Sort node in the workflow graph.
+                    if let Some(ids) = &self.workflow_ids {
+                        let specs = self.grid_state.sort_specs.clone();
+                        let sort_id = ids.sort;
+                        let _ = self.workflow.update_payload(
+                            sort_id,
+                            NodePayload::Sort { specs },
+                        );
+                        // Mark sort node executing (fetch is in flight).
+                        self.workflow.mark_executing(sort_id);
+                    }
+
                     self.viewport.first_row = 0;
                     self.grid_state.scroll_y = 0.0;
                     self.inspected_col = Some(column);
@@ -263,7 +302,13 @@ impl SplitOfficeApp {
                 }
                 GridAction::SortCleared => {
                     self.grid_state.clear_sorts();
-                    self.sort.clear();
+                    if let Some(ids) = &self.workflow_ids {
+                        let sort_id = ids.sort;
+                        let _ = self.workflow.update_payload(
+                            sort_id,
+                            NodePayload::Sort { specs: vec![] },
+                        );
+                    }
                     self.viewport.first_row = 0;
                     self.grid_state.scroll_y = 0.0;
                     self.fetch_page();
@@ -289,23 +334,29 @@ impl SplitOfficeApp {
             .map(|(col, text)| (col.clone(), text.clone()))
             .collect();
 
-        if filters.is_empty() {
-            self.filter_expr = FilterExpr::None;
+        let expr = if filters.is_empty() {
+            FilterExpr::None
         } else {
-            // AND together all column filters, each doing a Contains on its column.
+            // AND together all column filters.
             let mut exprs: Vec<FilterExpr> = filters
                 .into_iter()
-                .map(|(col, text)| FilterExpr::Contains {
-                    column: col,
-                    pattern: text,
-                })
+                .map(|(col, text)| FilterExpr::Contains { column: col, pattern: text })
                 .collect();
-
             let mut expr = exprs.remove(0);
             for next in exprs {
                 expr = FilterExpr::And(Box::new(expr), Box::new(next));
             }
-            self.filter_expr = expr;
+            expr
+        };
+
+        // Update the Filter node in the workflow graph.
+        if let Some(ids) = &self.workflow_ids {
+            let filter_id = ids.filter;
+            let _ = self.workflow.update_payload(
+                filter_id,
+                NodePayload::Filter { expr: expr.clone() },
+            );
+            self.workflow.mark_executing(filter_id);
         }
 
         self.viewport.first_row = 0;
@@ -332,7 +383,14 @@ impl SplitOfficeApp {
             if !self.grid_state.sort_specs.is_empty() {
                 if ui.button("↻  Clear Sorts").clicked() {
                     self.grid_state.clear_sorts();
-                    self.sort.clear();
+                    // Clear the Sort node in the workflow graph.
+                    if let Some(ids) = &self.workflow_ids {
+                        let sort_id = ids.sort;
+                        let _ = self.workflow.update_payload(
+                            sort_id,
+                            NodePayload::Sort { specs: vec![] },
+                        );
+                    }
                     self.viewport.first_row = 0;
                     self.grid_state.scroll_y = 0.0;
                     self.fetch_page();
@@ -343,6 +401,14 @@ impl SplitOfficeApp {
             if self.grid_state.has_active_filters() {
                 if ui.button("×  Clear Filters").clicked() {
                     self.grid_state.column_filters.clear();
+                    // Clear the Filter node in the workflow graph.
+                    if let Some(ids) = &self.workflow_ids {
+                        let filter_id = ids.filter;
+                        let _ = self.workflow.update_payload(
+                            filter_id,
+                            NodePayload::Filter { expr: FilterExpr::None },
+                        );
+                    }
                     self.apply_filter();
                 }
                 ui.separator();
@@ -458,12 +524,34 @@ impl eframe::App for SplitOfficeApp {
             .default_width(220.0)
             .show(ctx, |ui| {
                 if let Some(handle) = &self.handle {
+                    // Quality issues and relationships are now rendered inside
+                    // schema_panel's scroll area (constitution §Predictability).
                     panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
-                    if let Some(ref profile) = self.profile {
-                        panels::quality_panel(ui, profile);
+                } else {
+                    label::muted(ui, "No dataset loaded");
+                }
+            });
+
+        // Second left panel: workflow DAG sidebar.
+        //
+        // Shows the Dataset → Filter → Sort chain with per-node execution state.
+        // Rendered only when a dataset is loaded; always mounted so egui panel
+        // IDs remain stable across frames.
+        egui::SidePanel::left("workflow_panel")
+            .resizable(true)
+            .min_width(140.0)
+            .default_width(180.0)
+            .show(ctx, |ui| {
+                if self.handle.is_some() {
+                    let to_remove = workflow_sidebar::workflow_panel(ui, &self.workflow);
+                    for node_id in to_remove {
+                        let _ = self.workflow.remove_node(node_id);
+                        // Rebuild query — graph changed.
+                        self.fetch_page();
+                        self.refresh_count();
                     }
                 } else {
-                    label::text(ui, "No dataset loaded");
+                    label::muted(ui, "No workflow");
                 }
             });
 
@@ -485,6 +573,7 @@ impl eframe::App for SplitOfficeApp {
                 });
                 panels::column_inspector(ui, col_stats, col_profile);
             });
+
 
         // Central panel: grid.
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -517,10 +606,10 @@ impl eframe::App for SplitOfficeApp {
                     ui.vertical_centered(|ui| {
                         ui.add_space(60.0);
                         label::text(ui, "Split Office");
-                        label::text(ui, "Research Prototype");
+                        label::muted(ui, "Research Prototype");
                         ui.add_space(20.0);
                         label::text(ui, "▶  Drop a Parquet or CSV file here");
-                        label::text(ui, "or click Open File above");
+                        label::muted(ui, "or click Open File above");
                     });
                 });
             }
@@ -534,12 +623,4 @@ impl eframe::App for SplitOfficeApp {
     }
 }
 
-fn fmt_large(n: usize) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
-}
+

@@ -106,7 +106,7 @@ pub fn load_csv(path: impl AsRef<Path>) -> Result<DatasetHandle> {
 
     info!(name = %name, rows = df.height(), cols = df.width(), sep = %sep_char, "converted csv → parquet");
 
-    let schema = polars_schema_to_core(&df.schema());
+    let schema = polars_schema_to_core(df.schema());
     let row_count = df.height();
 
     let dataset = Dataset::new(next_id(), name, schema, row_count, parquet_path.clone());

@@ -38,7 +38,7 @@ mod tests {
 
     #[test]
     fn test_null_bar() {
-        let s = Series::new("test", &[Some(1), None, Some(3), Some(4)]);
+        let s = Series::new("test".into(), &[Some(1), None, Some(3), Some(4)]);
         let na = NullAnalysis::analyze(&s);
         assert_eq!(na.null_count, 1);
         assert!((na.null_pct - 0.25).abs() < 0.01);

@@ -10,14 +10,20 @@ use crate::cell::format_cell;
 use crate::state::{GridAction, GridState};
 
 // ── Color palette ────────────────────────────────────────────────────────────
+//
+// All colours must be declared here. No inline Color32::from_rgb literals
+// anywhere else in this file (constitution §Limited Visual Vocabulary).
 const BG_HEADER: Color32 = Color32::from_rgb(22, 22, 30);
 const BG_FILTER_ROW: Color32 = Color32::from_rgb(17, 17, 24);
 const BG_ROW_ODD: Color32 = Color32::from_rgb(18, 18, 26);
 const BG_ROW_EVEN: Color32 = Color32::from_rgb(24, 24, 33);
 const BG_ROW_SELECTED: Color32 = Color32::from_rgb(40, 70, 130);
+const BG_ROW_HOVER_ODD: Color32 = Color32::from_rgb(28, 28, 36);
+const BG_ROW_HOVER_EVEN: Color32 = Color32::from_rgb(34, 34, 43);
 #[allow(dead_code)]
 const BG_HOVER: Color32 = Color32::from_rgba_premultiplied(255, 255, 255, 12);
 const FG_HEADER: Color32 = Color32::from_rgb(200, 200, 220);
+const FG_TYPE_LABEL: Color32 = Color32::from_rgb(100, 100, 130);
 const FG_CELL_TEXT: Color32 = Color32::from_rgb(220, 220, 230);
 const FG_CELL_NULL: Color32 = Color32::from_rgb(90, 90, 110);
 const FG_CELL_NUM: Color32 = Color32::from_rgb(130, 200, 255);
@@ -27,8 +33,22 @@ const BORDER_COL: Color32 = Color32::from_rgb(40, 40, 55);
 const RESIZE_HANDLE: Color32 = Color32::from_rgb(60, 80, 140);
 const FILTER_BG: Color32 = Color32::from_rgb(30, 30, 42);
 const FILTER_BG_ACTIVE: Color32 = Color32::from_rgb(40, 50, 70);
+const FILTER_FOCUSED: Color32 = Color32::from_rgb(50, 60, 90);
 const FILTER_TEXT: Color32 = Color32::from_rgb(200, 200, 220);
 const FILTER_PLACEHOLDER: Color32 = Color32::from_rgb(70, 70, 100);
+const SCROLLBAR_BG: Color32 = Color32::from_rgb(15, 15, 22);
+const SCROLLBAR_THUMB: Color32 = Color32::from_rgb(60, 80, 140);
+
+// ── Font size tokens ──────────────────────────────────────────────────────────
+//
+// All font sizes must be declared here (constitution §Limited Visual Vocabulary).
+/// Primary font for column names and cell values.
+const FONT_SIZE_CELL: f32 = 12.0;
+/// Smaller font for column type labels shown below header names.
+const FONT_SIZE_TYPE_LABEL: f32 = 9.0;
+/// Font for filter row input text.
+const FONT_SIZE_FILTER: f32 = 11.0;
+
 
 /// The grid renderer.
 ///
@@ -233,10 +253,10 @@ impl GridRenderer {
         let header_clicked = grid_response.clicked()
             && grid_response
                 .interact_pointer_pos()
-                .map_or(false, |pos| header_rect.contains(pos));
+                .is_some_and(|pos| header_rect.contains(pos));
 
         let mut x = grid_rect.left() - state.scroll_x;
-        let font = FontId::proportional(12.0);
+        let font = FontId::proportional(FONT_SIZE_CELL);
 
         for (idx, col) in dataset.schema.columns.iter().enumerate() {
             let w = state.col_width(idx);
@@ -264,7 +284,7 @@ impl GridRenderer {
             }
 
             // Hover effect on header.
-            let hovered = grid_response.hover_pos().map_or(false, |pos| col_rect.contains(pos));
+            let hovered = grid_response.hover_pos().is_some_and(|pos| col_rect.contains(pos));
             if hovered {
                 painter.rect_filled(col_rect, 0.0, Color32::from_rgba_premultiplied(255, 255, 255, 8));
             }
@@ -307,8 +327,8 @@ impl GridRenderer {
                     type_pos,
                     egui::Align2::LEFT_TOP,
                     &type_label,
-                    FontId::proportional(9.0),
-                    Color32::from_rgb(100, 100, 130),
+                    FontId::proportional(FONT_SIZE_TYPE_LABEL),
+                    FG_TYPE_LABEL,
                 );
 
             // Column border.
@@ -354,9 +374,9 @@ impl GridRenderer {
         let filter_clicked = grid_response.clicked()
             && grid_response
                 .interact_pointer_pos()
-                .map_or(false, |pos| filter_rect.contains(pos));
+                .is_some_and(|pos| filter_rect.contains(pos));
 
-        let font = FontId::proportional(11.0);
+        let font = FontId::proportional(FONT_SIZE_FILTER);
         let mut x = grid_rect.left() - state.scroll_x;
 
         for (_idx, col) in dataset.schema.columns.iter().enumerate() {
@@ -386,7 +406,7 @@ impl GridRenderer {
 
             // Filter input background.
             let bg = if is_focused {
-                Color32::from_rgb(50, 60, 90)
+                FILTER_FOCUSED
             } else if has_filter {
                 FILTER_BG_ACTIVE
             } else {
@@ -502,6 +522,7 @@ impl GridRenderer {
 
     // ── Data rows ─────────────────────────────────────────────────────────
 
+    #[allow(clippy::too_many_arguments)]
     fn paint_rows(
         _ui: &Ui,
         painter: &Painter,
@@ -514,7 +535,7 @@ impl GridRenderer {
         grid_response: &Response,
         actions: &mut Vec<GridAction>,
     ) {
-        let font = FontId::proportional(12.0);
+        let font = FontId::proportional(FONT_SIZE_CELL);
         let total_header_h = GridState::total_header_height();
         let data_rect = Rect::from_min_size(
             Pos2::new(grid_rect.left(), grid_rect.top() + total_header_h),
@@ -561,9 +582,9 @@ impl GridRenderer {
                 BG_ROW_SELECTED
             } else if is_hovered {
                 if local_row % 2 == 0 {
-                    Color32::from_rgb(34, 34, 43)
+                    BG_ROW_HOVER_EVEN
                 } else {
-                    Color32::from_rgb(28, 28, 36)
+                    BG_ROW_HOVER_ODD
                 }
             } else if local_row % 2 == 0 {
                 BG_ROW_EVEN
@@ -734,7 +755,7 @@ impl GridRenderer {
 
         let (response, painter) = ui.allocate_painter(rect.size(), Sense::click_and_drag());
         let painter = painter;
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(15, 15, 22));
+        painter.rect_filled(rect, 0.0, SCROLLBAR_BG);
 
         let thumb_ratio = (visible_rows as f32 / total_rows as f32).min(1.0);
         let thumb_h = (rect.height() * thumb_ratio).max(20.0);
@@ -746,7 +767,7 @@ impl GridRenderer {
             Pos2::new(rect.left() + 2.0, thumb_y),
             Vec2::new(rect.width() - 4.0, thumb_h),
         );
-        painter.rect_filled(thumb_rect, 4.0, Color32::from_rgb(60, 80, 140));
+        painter.rect_filled(thumb_rect, 4.0, SCROLLBAR_THUMB);
 
         if response.dragged() {
             let delta = response.drag_delta().y;
@@ -781,7 +802,7 @@ impl GridRenderer {
         }
 
         let (response, painter) = ui.allocate_painter(rect.size(), Sense::click_and_drag());
-        painter.rect_filled(rect, 0.0, Color32::from_rgb(15, 15, 22));
+        painter.rect_filled(rect, 0.0, SCROLLBAR_BG);
 
         let thumb_ratio = (viewport_width / content_width).min(1.0);
         let thumb_w = (rect.width() * thumb_ratio).max(20.0);
@@ -793,7 +814,7 @@ impl GridRenderer {
             Pos2::new(thumb_x, rect.top() + 2.0),
             Vec2::new(thumb_w, rect.height() - 4.0),
         );
-        painter.rect_filled(thumb_rect, 4.0, Color32::from_rgb(60, 80, 140));
+        painter.rect_filled(thumb_rect, 4.0, SCROLLBAR_THUMB);
 
         if response.dragged() {
             let delta = response.drag_delta().x;

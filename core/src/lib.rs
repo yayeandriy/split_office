@@ -8,13 +8,15 @@
 
 pub mod dataset;
 pub mod filter;
+pub mod fmt;
 pub mod selection;
 pub mod sort;
 pub mod types;
 pub mod viewport;
 
-pub use dataset::{Column, Dataset, DatasetId, Schema};
+pub use dataset::{Column, ColumnId, Dataset, DatasetId, Schema};
 pub use filter::FilterExpr;
+pub use fmt::fmt_large;
 pub use selection::Selection;
 pub use sort::{SortDirection, SortSpec};
 pub use types::DataType;

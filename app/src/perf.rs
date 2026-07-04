@@ -1,3 +1,5 @@
+use core::fmt_large;
+
 /// Performance metrics tracked every frame.
 #[derive(Default, Clone)]
 pub struct PerfOverlay {
@@ -34,7 +36,7 @@ impl PerfOverlay {
         self.fps_accum += 1.0 / frame_time_secs;
 
         // Smooth FPS over 30 frames.
-        if self.frame_count % 30 == 0 {
+        if self.frame_count.is_multiple_of(30) {
             self.fps = self.fps_accum / 30.0;
             self.fps_accum = 0.0;
         }
@@ -65,6 +67,10 @@ impl PerfOverlay {
     }
 
     /// Render the overlay as a small floating panel in the top-right.
+    ///
+    /// Note: This overlay uses `ui.label()` directly — it is a developer debug
+    /// tool, not a user-facing surface, and is therefore exempt from the
+    /// `label::*` typography mandate.
     pub fn show(&mut self, ctx: &egui::Context) {
         if !self.visible {
             return;
@@ -111,19 +117,10 @@ impl PerfOverlay {
                         label(ui, "Frame", &format!("{:.2} ms", self.frame_ms));
                         label(ui, "Memory", &format!("{:.1} MiB", self.memory_mib));
                         label(ui, "Visible rows", &format!("{}", self.visible_rows));
-                        label(ui, "Total rows", &format!("{}", format_large(self.total_rows)));
+                        label(ui, "Total rows", &fmt_large(self.total_rows));
                         label(ui, "Query", &format!("{:.1} ms", self.query_latency_ms));
                     });
             });
     }
 }
 
-fn format_large(n: usize) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
-}

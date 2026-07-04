@@ -13,6 +13,7 @@ storage = { path = "../storage" }
 query = { path = "../query" }
 grid = { path = "../grid" }
 profiler = { path = "../profiler" }
+workflow = { path = "../workflow" }
 eframe.workspace = true
 egui.workspace = true
 arrow.workspace = true
