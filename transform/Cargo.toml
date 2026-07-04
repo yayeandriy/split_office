@@ -1,0 +1,10 @@
+[package]
+name = "transform"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+core = { path = "../core" }
+expression = { path = "../expression" }
+serde.workspace = true
+thiserror.workspace = true

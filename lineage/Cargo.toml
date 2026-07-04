@@ -1,0 +1,9 @@
+[package]
+name = "lineage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+core = { path = "../core" }
+serde.workspace = true
+thiserror.workspace = true
