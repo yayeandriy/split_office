@@ -12,13 +12,13 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Split Office Team"]
 
 [workspace.dependencies]
 # UI
-eframe = { version = "0.35", default-features = false, features = ["default_fonts", "wgpu"] }
+eframe = { version = "0.35", default-features = false, features = ["default_fonts", "wgpu", "persistence"] }
 egui = "0.35"
 
 # Data
@@ -46,6 +46,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 # Benchmarks
 criterion = { version = "0.5", features = ["html_reports"] }

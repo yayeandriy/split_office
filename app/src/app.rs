@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use arrow::record_batch::RecordBatch;
 use egui::Ui;
+use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use core::{fmt_large, FilterExpr, Viewport};
@@ -39,6 +40,46 @@ enum BgMessage {
 
 // ── Application state ─────────────────────────────────────────────────────────
 
+/// UI state that survives app restarts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UiPersist {
+    /// Last successfully opened file path.
+    last_file: Option<PathBuf>,
+    /// Panel widths in logical pixels.
+    schema_panel_width: f32,
+    workflow_panel_width: f32,
+    inspector_panel_width: f32,
+    /// Whether each panel is visible.
+    #[serde(default = "default_true")]
+    show_schema_panel: bool,
+    #[serde(default = "default_true")]
+    show_workflow_panel: bool,
+    #[serde(default = "default_true")]
+    show_inspector_panel: bool,
+    /// Performance overlay visibility.
+    #[serde(default)]
+    perf_visible: bool,
+}
+
+fn default_true() -> bool { true }
+
+impl Default for UiPersist {
+    fn default() -> Self {
+        Self {
+            last_file: None,
+            schema_panel_width: 220.0,
+            workflow_panel_width: 180.0,
+            inspector_panel_width: 230.0,
+            show_schema_panel: true,
+            show_workflow_panel: true,
+            show_inspector_panel: true,
+            perf_visible: false,
+        }
+    }
+}
+
+const STORAGE_KEY: &str = "split_office_ui_state";
+
 pub struct SplitOfficeApp {
     rx: Receiver<BgMessage>,
     tx: Sender<BgMessage>,
@@ -67,14 +108,25 @@ pub struct SplitOfficeApp {
     last_frame: Instant,
     loading: bool,
     status_message: String,
+
+    // ── Persisted UI state ───────────────────────────────────────────────
+    persist: UiPersist,
 }
 
 impl SplitOfficeApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let (tx, rx) = channel();
+
+        // ── Load persisted UI state ──────────────────────────────────────
+        let persist = cc
+            .storage
+            .and_then(|storage| storage.get_string(STORAGE_KEY))
+            .and_then(|json| serde_json::from_str::<UiPersist>(&json).ok())
+            .unwrap_or_default();
+
         // Bootstrap an empty workflow graph (no dataset yet).
         // It will be rebuilt when a dataset is loaded.
-        Self {
+        let mut app = Self {
             rx,
             tx,
             handle: None,
@@ -92,7 +144,22 @@ impl SplitOfficeApp {
             last_frame: Instant::now(),
             loading: false,
             status_message: "Drop a Parquet or CSV file to open it.".to_string(),
+            persist,
+
+        };
+
+        // ── Apply persisted perf overlay visibility ─────────────────────
+        app.perf.visible = app.persist.perf_visible;
+
+        // ── Auto-restore last opened file ───────────────────────────────
+        let restore_path = app.persist.last_file.clone();
+        if let Some(path) = restore_path {
+            if path.exists() {
+                app.open_file(path);
+            }
         }
+
+        app
     }
 
     // ── File loading ──────────────────────────────────────────────────────────
@@ -100,6 +167,8 @@ impl SplitOfficeApp {
     fn open_file(&mut self, path: PathBuf) {
         self.loading = true;
         self.status_message = format!("Loading {}…", path.display());
+        // Remember the path for next session (written on success in drain_messages).
+        self.persist.last_file = Some(path.clone());
         let tx = self.tx.clone();
         std::thread::spawn(move || {
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -460,6 +529,14 @@ impl SplitOfficeApp {
 // ── eframe::App impl ─────────────────────────────────────────────────────────
 
 impl eframe::App for SplitOfficeApp {
+    fn save(&mut self, _storage: &mut dyn eframe::Storage) {
+        // Sync runtime state back into the persisted struct before serializing.
+        self.persist.perf_visible = self.perf.visible;
+        if let Ok(json) = serde_json::to_string(&self.persist) {
+            _storage.set_string(STORAGE_KEY, json);
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Perf tracking.
         let now = Instant::now();
@@ -486,10 +563,21 @@ impl eframe::App for SplitOfficeApp {
             .show(ui, |ui: &mut egui::Ui| {
                 ui.horizontal(|ui: &mut egui::Ui| {
                     ui.menu_button("View", |ui: &mut egui::Ui| {
-                        if ui
-                            .selectable_label(self.perf.visible, "Performance Overlay")
-                            .clicked()
-                        {
+                        ui.label("Panels");
+                        if ui.selectable_label(self.persist.show_schema_panel, "Schema Panel").clicked() {
+                            self.persist.show_schema_panel = !self.persist.show_schema_panel;
+                            ui.close();
+                        }
+                        if ui.selectable_label(self.persist.show_workflow_panel, "Workflow Panel").clicked() {
+                            self.persist.show_workflow_panel = !self.persist.show_workflow_panel;
+                            ui.close();
+                        }
+                        if ui.selectable_label(self.persist.show_inspector_panel, "Column Inspector").clicked() {
+                            self.persist.show_inspector_panel = !self.persist.show_inspector_panel;
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.selectable_label(self.perf.visible, "Performance Overlay").clicked() {
                             self.perf.visible = !self.perf.visible;
                             ui.close();
                         }
@@ -512,48 +600,57 @@ impl eframe::App for SplitOfficeApp {
             });
 
         // Left panel: schema.
-        egui::Panel::left("schema_panel")
-            .resizable(true)
-            .show(ui, |ui: &mut egui::Ui| {
-                if let Some(handle) = &self.handle {
-                    panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
-                } else {
-                    label::muted(ui, "No dataset loaded");
-                }
-            });
+        if self.persist.show_schema_panel {
+            let schema_resp = egui::Panel::left("schema_panel")
+                .resizable(true)
+                .show(ui, |ui: &mut egui::Ui| {
+                    if let Some(handle) = &self.handle {
+                        panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
+                    } else {
+                        label::muted(ui, "No dataset loaded");
+                    }
+                });
+            self.persist.schema_panel_width = schema_resp.response.rect.width();
+        }
 
         // Second left panel: workflow DAG sidebar.
-        egui::Panel::left("workflow_panel")
-            .resizable(true)
-            .show(ui, |ui: &mut egui::Ui| {
-                if self.handle.is_some() {
-                    let to_remove = workflow_sidebar::workflow_panel(ui, &self.workflow);
-                    for node_id in to_remove {
-                        let _ = self.workflow.remove_node(node_id);
-                        self.fetch_page();
-                        self.refresh_count();
+        if self.persist.show_workflow_panel {
+            let wf_resp = egui::Panel::left("workflow_panel")
+                .resizable(true)
+                .show(ui, |ui: &mut egui::Ui| {
+                    if self.handle.is_some() {
+                        let to_remove = workflow_sidebar::workflow_panel(ui, &self.workflow);
+                        for node_id in to_remove {
+                            let _ = self.workflow.remove_node(node_id);
+                            self.fetch_page();
+                            self.refresh_count();
+                        }
+                    } else {
+                        label::muted(ui, "No workflow");
                     }
-                } else {
-                    label::muted(ui, "No workflow");
-                }
-            });
+                });
+            self.persist.workflow_panel_width = wf_resp.response.rect.width();
+        }
 
         // Right panel: column inspector.
-        egui::Panel::right("inspector_panel")
-            .resizable(true)
-            .show(ui, |ui: &mut egui::Ui| {
-                let col_stats = self.inspected_col.as_ref().and_then(|name| {
-                    self.dataset_stats
-                        .as_ref()?
-                        .columns
-                        .iter()
-                        .find(|c| &c.name == name)
+        if self.persist.show_inspector_panel {
+            let insp_resp = egui::Panel::right("inspector_panel")
+                .resizable(true)
+                .show(ui, |ui: &mut egui::Ui| {
+                    let col_stats = self.inspected_col.as_ref().and_then(|name| {
+                        self.dataset_stats
+                            .as_ref()?
+                            .columns
+                            .iter()
+                            .find(|c| &c.name == name)
+                    });
+                    let col_profile = self.inspected_col.as_ref().and_then(|name| {
+                        self.profile.as_ref()?.column(name)
+                    });
+                    panels::column_inspector(ui, col_stats, col_profile);
                 });
-                let col_profile = self.inspected_col.as_ref().and_then(|name| {
-                    self.profile.as_ref()?.column(name)
-                });
-                panels::column_inspector(ui, col_stats, col_profile);
-            });
+            self.persist.inspector_panel_width = insp_resp.response.rect.width();
+        }
 
 
         // Central panel: grid.
@@ -599,8 +696,16 @@ impl eframe::App for SplitOfficeApp {
         // Performance overlay (always on top).
         self.perf.show(ui.ctx());
 
+        // ── Persist panel widths into egui Memory (auto-restored by eframe) ──
+        let ctx = ui.ctx();
+        ctx.data_mut(|d| {
+            d.insert_persisted(egui::Id::new("panel_schema_width"), self.persist.schema_panel_width);
+            d.insert_persisted(egui::Id::new("panel_workflow_width"), self.persist.workflow_panel_width);
+            d.insert_persisted(egui::Id::new("panel_inspector_width"), self.persist.inspector_panel_width);
+        });
+
         // Drive continuous repainting for 60 FPS.
-        ui.ctx().request_repaint();
+        ctx.request_repaint();
     }
 }
 
