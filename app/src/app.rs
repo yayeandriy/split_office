@@ -59,6 +59,9 @@ struct UiPersist {
     /// Performance overlay visibility.
     #[serde(default)]
     perf_visible: bool,
+    /// Last inspected column name.
+    #[serde(default)]
+    inspected_col: Option<String>,
 }
 
 fn default_true() -> bool { true }
@@ -74,6 +77,7 @@ impl Default for UiPersist {
             show_workflow_panel: true,
             show_inspector_panel: true,
             perf_visible: false,
+            inspected_col: None,
         }
     }
 }
@@ -139,7 +143,7 @@ impl SplitOfficeApp {
             total_rows: 0,
             grid_state: GridState::new(),
             current_batch: None,
-            inspected_col: None,
+            inspected_col: persist.inspected_col.clone(),
             perf: PerfOverlay::new(),
             last_frame: Instant::now(),
             loading: false,
@@ -532,6 +536,7 @@ impl eframe::App for SplitOfficeApp {
     fn save(&mut self, _storage: &mut dyn eframe::Storage) {
         // Sync runtime state back into the persisted struct before serializing.
         self.persist.perf_visible = self.perf.visible;
+        self.persist.inspected_col = self.inspected_col.clone();
         if let Ok(json) = serde_json::to_string(&self.persist) {
             _storage.set_string(STORAGE_KEY, json);
         }
@@ -599,25 +604,25 @@ impl eframe::App for SplitOfficeApp {
                 self.show_status_bar(ui);
             });
 
-        // Left panel: schema.
-        if self.persist.show_schema_panel {
-            let schema_resp = egui::Panel::left("schema_panel")
-                .resizable(true)
-                .show(ui, |ui: &mut egui::Ui| {
+        // Left panel: schema — always rendered so eframe can persist its size.
+        let schema_resp = egui::Panel::left("schema_panel")
+            .resizable(true)
+            .show(ui, |ui: &mut egui::Ui| {
+                if self.persist.show_schema_panel {
                     if let Some(handle) = &self.handle {
                         panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
                     } else {
                         label::muted(ui, "No dataset loaded");
                     }
-                });
-            self.persist.schema_panel_width = schema_resp.response.rect.width();
-        }
+                }
+            });
+        self.persist.schema_panel_width = schema_resp.response.rect.width();
 
-        // Second left panel: workflow DAG sidebar.
-        if self.persist.show_workflow_panel {
-            let wf_resp = egui::Panel::left("workflow_panel")
-                .resizable(true)
-                .show(ui, |ui: &mut egui::Ui| {
+        // Second left panel: workflow DAG sidebar — always rendered.
+        let wf_resp = egui::Panel::left("workflow_panel")
+            .resizable(true)
+            .show(ui, |ui: &mut egui::Ui| {
+                if self.persist.show_workflow_panel {
                     if self.handle.is_some() {
                         let to_remove = workflow_sidebar::workflow_panel(ui, &self.workflow);
                         for node_id in to_remove {
@@ -628,15 +633,15 @@ impl eframe::App for SplitOfficeApp {
                     } else {
                         label::muted(ui, "No workflow");
                     }
-                });
-            self.persist.workflow_panel_width = wf_resp.response.rect.width();
-        }
+                }
+            });
+        self.persist.workflow_panel_width = wf_resp.response.rect.width();
 
-        // Right panel: column inspector.
-        if self.persist.show_inspector_panel {
-            let insp_resp = egui::Panel::right("inspector_panel")
-                .resizable(true)
-                .show(ui, |ui: &mut egui::Ui| {
+        // Right panel: column inspector — always rendered.
+        let insp_resp = egui::Panel::right("inspector_panel")
+            .resizable(true)
+            .show(ui, |ui: &mut egui::Ui| {
+                if self.persist.show_inspector_panel {
                     let col_stats = self.inspected_col.as_ref().and_then(|name| {
                         self.dataset_stats
                             .as_ref()?
@@ -648,9 +653,9 @@ impl eframe::App for SplitOfficeApp {
                         self.profile.as_ref()?.column(name)
                     });
                     panels::column_inspector(ui, col_stats, col_profile);
-                });
-            self.persist.inspector_panel_width = insp_resp.response.rect.width();
-        }
+                }
+            });
+        self.persist.inspector_panel_width = insp_resp.response.rect.width();
 
 
         // Central panel: grid.
