@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# pre-commit hook: bumps the workspace minor version before each commit.
+#
+# Example: 0.1.0 → 0.2.0 → 0.3.0 …
+#
+# To install: copy this file to .git/hooks/pre-commit
+#   cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+#
+# To skip version bump for a single commit:
+#   SKIP_BUMP=1 git commit ...
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+CARGO_TOML="$ROOT/Cargo.toml"
+
+# ── Skip if SKIP_BUMP is set or no Cargo.toml staged ──────────────────────────
+if [[ "${SKIP_BUMP:-}" == "1" ]]; then
+    exit 0
+fi
+
+# ── Parse current version ─────────────────────────────────────────────────────
+CURRENT=$(grep -E '^version\s*=' "$CARGO_TOML" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+
+if [[ -z "$CURRENT" ]]; then
+    echo "pre-commit: could not parse version from Cargo.toml" >&2
+    exit 0
+fi
+
+# ── Bump minor ────────────────────────────────────────────────────────────────
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+# Handle pre-release suffixes like 0.1.0-alpha → 0.2.0
+PATCH="${PATCH%%-*}"
+MINOR=$((MINOR + 1))
+PATCH=0
+NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+# ── Update Cargo.toml ─────────────────────────────────────────────────────────
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" "$CARGO_TOML"
+else
+    sed -i "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" "$CARGO_TOML"
+fi
+
+# ── Stage the version bump ────────────────────────────────────────────────────
+git add "$CARGO_TOML"
+
+echo "pre-commit: bumped version $CURRENT → $NEW_VERSION"
