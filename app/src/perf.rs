@@ -76,7 +76,7 @@ impl PerfOverlay {
             return;
         }
 
-        let screen_rect = ctx.screen_rect();
+        let screen_rect = ctx.content_rect();
         let panel_rect = egui::Rect::from_min_size(
             egui::Pos2::new(screen_rect.right() - 220.0, screen_rect.top() + 40.0),
             egui::Vec2::new(210.0, 150.0),

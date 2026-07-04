@@ -18,8 +18,8 @@ authors = ["Split Office Team"]
 
 [workspace.dependencies]
 # UI
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "wgpu"] }
-egui = "0.31"
+eframe = { version = "0.35", default-features = false, features = ["default_fonts", "wgpu"] }
+egui = "0.35"
 
 # Data
 arrow = { version = "58", features = ["ipc"] }

@@ -178,7 +178,7 @@ impl GridRenderer {
 
         // ── 12. Mouse wheel scroll ─────────────────────────────────────────
         if grid_response.hovered() {
-            let scroll_delta = ui.input(|i| i.raw_scroll_delta);
+            let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
             if scroll_delta.y.abs() > 0.5 {
                 let old_first = first_row;
                 state.scroll_y = (state.scroll_y - scroll_delta.y).max(0.0);

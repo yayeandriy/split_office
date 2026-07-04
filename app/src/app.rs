@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use arrow::record_batch::RecordBatch;
-use egui::{Context, Ui};
+use egui::Ui;
 use tracing::{error, info};
 
 use core::{fmt_large, FilterExpr, Viewport};
@@ -460,7 +460,7 @@ impl SplitOfficeApp {
 // ── eframe::App impl ─────────────────────────────────────────────────────────
 
 impl eframe::App for SplitOfficeApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // Perf tracking.
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f64().max(0.0001);
@@ -473,7 +473,7 @@ impl eframe::App for SplitOfficeApp {
         self.drain_messages();
 
         // File drop.
-        ctx.input(|i| {
+        ui.input(|i| {
             if let Some(file) = i.raw.dropped_files.first() {
                 if let Some(path) = &file.path {
                     self.open_file(path.clone());
@@ -482,50 +482,40 @@ impl eframe::App for SplitOfficeApp {
         });
 
         // Menu bar.
-        egui::TopBottomPanel::top("menu_bar")
-            .min_height(22.0)
-            .show(ctx, |ui| {
-                egui::menu::bar(ui, |ui| {
-                    ui.menu_button("View", |ui| {
+        egui::Panel::top("menu_bar")
+            .show(ui, |ui: &mut egui::Ui| {
+                ui.horizontal(|ui: &mut egui::Ui| {
+                    ui.menu_button("View", |ui: &mut egui::Ui| {
                         if ui
-                            .add(egui::SelectableLabel::new(
-                                self.perf.visible,
-                                "Performance Overlay",
-                            ))
+                            .selectable_label(self.perf.visible, "Performance Overlay")
                             .clicked()
                         {
                             self.perf.visible = !self.perf.visible;
-                            ui.close_menu();
+                            ui.close();
                         }
                     });
                 });
             });
 
         // Top toolbar.
-        egui::TopBottomPanel::top("toolbar")
-            .min_height(36.0)
-            .show(ctx, |ui| {
+        egui::Panel::top("toolbar")
+            .show(ui, |ui: &mut egui::Ui| {
                 ui.add_space(4.0);
                 self.show_toolbar(ui);
             });
 
         // Status bar.
-        egui::TopBottomPanel::bottom("status")
-            .min_height(24.0)
-            .show(ctx, |ui| {
+        egui::Panel::bottom("status")
+            .show(ui, |ui: &mut egui::Ui| {
                 ui.add_space(2.0);
                 self.show_status_bar(ui);
             });
 
         // Left panel: schema.
-        egui::SidePanel::left("schema_panel")
+        egui::Panel::left("schema_panel")
             .resizable(true)
-            .min_width(160.0)
-            .default_width(220.0)
-            .show(ctx, |ui| {
+            .show(ui, |ui: &mut egui::Ui| {
                 if let Some(handle) = &self.handle {
-                    // Quality issues and relationships are now rendered inside
-                    // schema_panel's scroll area (constitution §Predictability).
                     panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
                 } else {
                     label::muted(ui, "No dataset loaded");
@@ -533,20 +523,13 @@ impl eframe::App for SplitOfficeApp {
             });
 
         // Second left panel: workflow DAG sidebar.
-        //
-        // Shows the Dataset → Filter → Sort chain with per-node execution state.
-        // Rendered only when a dataset is loaded; always mounted so egui panel
-        // IDs remain stable across frames.
-        egui::SidePanel::left("workflow_panel")
+        egui::Panel::left("workflow_panel")
             .resizable(true)
-            .min_width(140.0)
-            .default_width(180.0)
-            .show(ctx, |ui| {
+            .show(ui, |ui: &mut egui::Ui| {
                 if self.handle.is_some() {
                     let to_remove = workflow_sidebar::workflow_panel(ui, &self.workflow);
                     for node_id in to_remove {
                         let _ = self.workflow.remove_node(node_id);
-                        // Rebuild query — graph changed.
                         self.fetch_page();
                         self.refresh_count();
                     }
@@ -556,11 +539,9 @@ impl eframe::App for SplitOfficeApp {
             });
 
         // Right panel: column inspector.
-        egui::SidePanel::right("inspector_panel")
+        egui::Panel::right("inspector_panel")
             .resizable(true)
-            .min_width(180.0)
-            .default_width(230.0)
-            .show(ctx, |ui| {
+            .show(ui, |ui: &mut egui::Ui| {
                 let col_stats = self.inspected_col.as_ref().and_then(|name| {
                     self.dataset_stats
                         .as_ref()?
@@ -576,7 +557,7 @@ impl eframe::App for SplitOfficeApp {
 
 
         // Central panel: grid.
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui: &mut egui::Ui| {
             if let Some(handle) = &self.handle {
                 if let Some(batch) = self.current_batch.clone() {
                     let h = ui.available_height();
@@ -616,10 +597,10 @@ impl eframe::App for SplitOfficeApp {
         });
 
         // Performance overlay (always on top).
-        self.perf.show(ctx);
+        self.perf.show(ui.ctx());
 
         // Drive continuous repainting for 60 FPS.
-        ctx.request_repaint();
+        ui.ctx().request_repaint();
     }
 }
 
