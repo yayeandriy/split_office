@@ -1,0 +1,8 @@
+[package]
+name = "workflow"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+core = { path = "../core" }
+serde.workspace = true
