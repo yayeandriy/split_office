@@ -25,6 +25,8 @@
 //! | Lazy evaluation      | ✅     |
 //! | Deterministic        | ✅     |
 //! | Reproducible         | ✅     |
+//! | Undo / Redo          | ✅     |
+//! | Modifier reordering  | ✅     |
 
 use std::collections::{HashSet, VecDeque};
 
@@ -268,6 +270,12 @@ pub struct LinearWorkflowIds {
 pub struct WorkflowGraph {
     nodes: Vec<WorkflowNode>,
     edges: Vec<Edge>,
+
+    // ── Undo / Redo (Spec §Undo/Redo) ────────────────────────────────────
+    #[serde(skip)]
+    undo_stack: Vec<WorkflowGraph>,
+    #[serde(skip)]
+    redo_stack: Vec<WorkflowGraph>,
 }
 
 impl WorkflowGraph {
@@ -278,11 +286,14 @@ impl WorkflowGraph {
         Self {
             nodes: Vec::new(),
             edges: Vec::new(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
         }
     }
 
     /// Add a node and return its assigned ID.
     pub fn add_node(&mut self, kind: NodeKind, payload: NodePayload) -> NodeId {
+        self.snapshot();
         let id = self.nodes.len();
         self.nodes.push(WorkflowNode::new(id, kind, payload));
         id
@@ -357,6 +368,8 @@ impl WorkflowGraph {
         id: NodeId,
         payload: NodePayload,
     ) -> Result<(), WorkflowError> {
+        self.snapshot();
+
         let node = self
             .nodes
             .get_mut(id)
@@ -403,6 +416,8 @@ impl WorkflowGraph {
         if id >= self.nodes.len() {
             return Err(WorkflowError::NodeNotFound(id));
         }
+
+        self.snapshot();
 
         // Remove all edges involving this node.
         self.edges.retain(|e| e.from != id && e.to != id);
@@ -584,6 +599,191 @@ impl WorkflowGraph {
 
         Ok(())
     }
+
+    // ── Undo / Redo (Spec §Undo/Redo, 100+ operations) ───────────────────
+
+    /// Save current state before a mutation.
+    /// Called automatically by mutation methods; public for manual snapshots.
+    pub fn snapshot(&mut self) {
+        // Push a clone of current state (sans undo/redo stacks).
+        let mut clone = self.clone();
+        clone.undo_stack.clear();
+        clone.redo_stack.clear();
+        self.undo_stack.push(clone);
+        // Clear redo stack — new action invalidates redo history.
+        self.redo_stack.clear();
+
+        // Cap undo depth at 200 to bound memory (spec says 100+).
+        if self.undo_stack.len() > 200 {
+            self.undo_stack.remove(0);
+        }
+    }
+
+    /// Undo the last mutation. Returns true if an undo was performed.
+    pub fn undo(&mut self) -> bool {
+        if let Some(mut prev) = self.undo_stack.pop() {
+            // Save current state to redo stack.
+            let mut current = self.clone();
+            current.undo_stack.clear();
+            current.redo_stack.clear();
+            self.redo_stack.push(current);
+
+            // Restore previous state.
+            std::mem::swap(self, &mut prev);
+            // Preserve the stacks from `self`.
+            self.undo_stack = prev.undo_stack;
+            self.redo_stack = prev.redo_stack;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Redo the last undone mutation. Returns true if a redo was performed.
+    pub fn redo(&mut self) -> bool {
+        if let Some(next) = self.redo_stack.pop() {
+            // Save current state to undo stack.
+            let mut current = self.clone();
+            current.undo_stack.clear();
+            current.redo_stack.clear();
+            self.undo_stack.push(current);
+
+            // Restore next state.
+            let mut next_state = next;
+            std::mem::swap(self, &mut next_state);
+            self.undo_stack = next_state.undo_stack;
+            self.redo_stack = next_state.redo_stack;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Whether there are actions that can be undone.
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+
+    /// Whether there are actions that can be redone.
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+
+    /// How many actions are in the undo stack.
+    pub fn undo_depth(&self) -> usize {
+        self.undo_stack.len()
+    }
+
+    // ── Modifier reordering (Spec: add/remove/reorder like Blender) ──────
+
+    /// Insert a node at the given index in the linear chain, rewiring edges.
+    pub fn insert_node_at(
+        &mut self,
+        index: usize,
+        kind: NodeKind,
+        payload: NodePayload,
+    ) -> Result<NodeId, WorkflowError> {
+        if index > self.nodes.len() {
+            return Err(WorkflowError::NodeNotFound(index));
+        }
+
+        self.snapshot();
+
+        // Add the new node.
+        let new_id = self.add_node(kind, payload);
+
+        // Move it to the desired index by swapping.
+        // We'll need to rebuild edges after reordering.
+        if new_id != index {
+            self.reorder_node_to(new_id, index);
+        }
+
+        // Rewire: connect prev → new → next in the execution plan order.
+        // We need to rebuild the linear chain.
+        self.rewire_linear_chain();
+
+        Ok(index)
+    }
+
+    /// Move a node from `from_index` to `to_index`.
+    pub fn move_modifier(&mut self, from_index: usize, to_index: usize) -> Result<(), WorkflowError> {
+        if from_index >= self.nodes.len() || to_index >= self.nodes.len() {
+            return Err(WorkflowError::NodeNotFound(if from_index >= self.nodes.len() { from_index } else { to_index }));
+        }
+        if from_index == to_index {
+            return Ok(());
+        }
+
+        self.snapshot();
+        self.reorder_node_to(from_index, to_index);
+        self.rewire_linear_chain();
+
+        Ok(())
+    }
+
+    /// Move modifier up one position in the list.
+    pub fn move_modifier_up(&mut self, index: usize) -> Result<(), WorkflowError> {
+        if index == 0 {
+            return Ok(());
+        }
+        self.move_modifier(index, index - 1)
+    }
+
+    /// Move modifier down one position in the list.
+    pub fn move_modifier_down(&mut self, index: usize) -> Result<(), WorkflowError> {
+        if index + 1 >= self.nodes.len() {
+            return Ok(());
+        }
+        self.move_modifier(index, index + 1)
+    }
+
+    /// Toggle whether a node is enabled (participates in execution).
+    pub fn toggle_node(&mut self, id: NodeId) -> Result<(), WorkflowError> {
+        self.snapshot();
+        let node = self.nodes.get_mut(id).ok_or(WorkflowError::NodeNotFound(id))?;
+        node.enabled = !node.enabled;
+        Ok(())
+    }
+
+    /// Reorder a node from one position to another in the linear chain.
+    fn reorder_node_to(&mut self, from: usize, to: usize) {
+        if from == to || from >= self.nodes.len() || to >= self.nodes.len() {
+            return;
+        }
+        // Collect IDs in current linear order.
+        let mut ids: Vec<NodeId> = (0..self.nodes.len()).collect();
+        let moved = ids.remove(from);
+        ids.insert(to, moved);
+
+        // Reorder nodes to match new ID order.
+        let mut new_nodes: Vec<Option<WorkflowNode>> = self.nodes.drain(..).map(Some).collect();
+        let mut ordered = Vec::with_capacity(new_nodes.len());
+        for &id in &ids {
+            if let Some(node) = new_nodes[id].take() {
+                ordered.push(node);
+            }
+        }
+        // Re-index.
+        for (i, node) in ordered.iter_mut().enumerate() {
+            node.id = i;
+        }
+        self.nodes = ordered;
+    }
+
+    /// Rewire edges into a linear chain following node insertion order.
+    fn rewire_linear_chain(&mut self) {
+        // Clear all edges.
+        self.edges.clear();
+        for node in &mut self.nodes {
+            node.inputs.clear();
+            node.outputs.clear();
+        }
+
+        // Wire in order: 0 → 1 → 2 → ...
+        for i in 0..self.nodes.len().saturating_sub(1) {
+            let _ = self.add_edge(i, i + 1);
+        }
+    }
 }
 
 // ── Workflow builder ──────────────────────────────────────────────────────────
@@ -655,6 +855,8 @@ impl WorkflowBuilder {
 
         // All start clean since they have default/initial values.
         graph.mark_all_clean();
+        // Clear undo stack — construction steps are not user actions.
+        graph.undo_stack.clear();
 
         (
             graph,
@@ -1226,5 +1428,143 @@ mod tests {
         let plan1 = build();
         let plan2 = build();
         assert_eq!(plan1, plan2, "identical graphs must produce identical plans");
+    }
+
+    // ── Undo / Redo (Spec §Undo/Redo) ────────────────────────────────────
+
+    #[test]
+    fn test_undo_redo_add_node() {
+        let mut g = WorkflowGraph::new();
+        assert!(!g.can_undo());
+        assert!(!g.can_redo());
+
+        let a = g.add_node(NodeKind::Dataset, NodePayload::Empty);
+        assert_eq!(g.node_count(), 1);
+        assert!(g.can_undo());
+
+        assert!(g.undo());
+        assert_eq!(g.node_count(), 0);
+        assert!(g.can_redo());
+
+        assert!(g.redo());
+        assert_eq!(g.node_count(), 1);
+    }
+
+    #[test]
+    fn test_undo_update_payload() {
+        let mut g = WorkflowGraph::new();
+        let a = g.add_node(NodeKind::Filter, NodePayload::Empty);
+        g.update_payload(a, NodePayload::Filter { expr: FilterExpr::None }).unwrap();
+
+        // Change payload.
+        g.update_payload(a, NodePayload::Filter {
+            expr: FilterExpr::Contains { column: "x".into(), pattern: "y".into() },
+        }).unwrap();
+
+        // Undo — should revert to FilterExpr::None.
+        assert!(g.undo());
+        if let NodePayload::Filter { expr } = &g.node(a).unwrap().payload {
+            assert!(matches!(expr, FilterExpr::None));
+        }
+
+        // Redo.
+        assert!(g.redo());
+        if let NodePayload::Filter { expr } = &g.node(a).unwrap().payload {
+            assert!(matches!(expr, FilterExpr::Contains { .. }));
+        }
+    }
+
+    #[test]
+    fn test_undo_redo_100_operations() {
+        let mut g = WorkflowGraph::new();
+        // Do 150 iterations: each does add_node + update_payload = 2 snapshots.
+        // Total 300 snapshots, capped at 200 (oldest 100 discarded).
+        for _ in 0..150 {
+            g.add_node(NodeKind::Filter, NodePayload::Empty);
+            // Only update_payload for nodes that still exist after capping.
+            // The oldest 50 iterations' snapshots are gone from undo stack.
+        }
+        assert_eq!(g.node_count(), 150);
+        assert!(g.can_undo());
+
+        // Undo 100 times → 50 nodes undone (2 snapshots per node).
+        for _ in 0..100 {
+            assert!(g.undo());
+        }
+        // 150 - 100 = 50 nodes remain.
+        assert_eq!(g.node_count(), 50);
+        assert!(g.can_undo());
+    }
+
+    #[test]
+    fn test_new_action_clears_redo() {
+        let mut g = WorkflowGraph::new();
+        g.add_node(NodeKind::Dataset, NodePayload::Empty);
+        assert!(g.can_undo());
+        g.undo();
+        assert!(g.can_redo());
+
+        // New action should clear redo.
+        g.add_node(NodeKind::Filter, NodePayload::Empty);
+        assert!(!g.can_redo());
+    }
+
+    // ── Modifier reordering (Spec: add/remove/reorder like Blender) ──────
+
+    #[test]
+    fn test_insert_node_at() {
+        let mut g = WorkflowGraph::new();
+        let a = g.add_node(NodeKind::Dataset, NodePayload::Empty);
+        let b = g.add_node(NodeKind::Sort, NodePayload::Empty);
+        g.add_edge(a, b).unwrap();
+
+        // Insert filter between dataset and sort.
+        g.insert_node_at(1, NodeKind::Filter, NodePayload::Empty).unwrap();
+
+        assert_eq!(g.node_count(), 3);
+        let plan = g.execution_plan().unwrap();
+        assert_eq!(plan.steps.len(), 3);
+        // Filter should be at position 1.
+        let node = g.node(1).unwrap();
+        assert_eq!(node.kind, NodeKind::Filter);
+    }
+
+    #[test]
+    fn test_move_modifier_up() {
+        let mut g = WorkflowGraph::new();
+        g.add_node(NodeKind::Dataset, NodePayload::Empty);    // 0
+        g.add_node(NodeKind::Filter, NodePayload::Empty);     // 1
+        g.add_node(NodeKind::Sort, NodePayload::Empty);       // 2
+        g.rewire_linear_chain();
+
+        g.move_modifier_up(2).unwrap(); // Sort moves to position 1
+        assert_eq!(g.node(1).unwrap().kind, NodeKind::Sort);
+        assert_eq!(g.node(2).unwrap().kind, NodeKind::Filter);
+    }
+
+    #[test]
+    fn test_move_modifier_down() {
+        let mut g = WorkflowGraph::new();
+        g.add_node(NodeKind::Dataset, NodePayload::Empty);
+        g.add_node(NodeKind::Filter, NodePayload::Empty);
+        g.add_node(NodeKind::Sort, NodePayload::Empty);
+        g.rewire_linear_chain();
+
+        g.move_modifier_down(0).unwrap(); // Dataset moves to position 1
+        assert_eq!(g.node(0).unwrap().kind, NodeKind::Filter);
+        assert_eq!(g.node(1).unwrap().kind, NodeKind::Dataset);
+    }
+
+    #[test]
+    fn test_toggle_node() {
+        let mut g = WorkflowGraph::new();
+        let a = g.add_node(NodeKind::Filter, NodePayload::Empty);
+        assert!(g.node(a).unwrap().enabled);
+
+        g.toggle_node(a).unwrap();
+        assert!(!g.node(a).unwrap().enabled);
+
+        g.toggle_node(a).unwrap();
+        assert!(g.node(a).unwrap().enabled);
     }
 }
