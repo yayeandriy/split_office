@@ -1,16 +1,31 @@
 use tracing_subscriber::EnvFilter;
 
+/// Load the app icon from embedded PNG bytes.
+fn load_icon() -> Option<egui::IconData> {
+    let png_bytes = include_bytes!("../assets/icon.png");
+    let img = image::load_from_memory(png_bytes).ok()?.into_rgba8();
+    let (width, height) = img.dimensions();
+    Some(egui::IconData {
+        rgba: img.into_raw(),
+        width,
+        height,
+    })
+}
+
 fn main() -> eframe::Result<()> {
     // Init logging.
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive("split_office=info".parse().unwrap()))
         .init();
 
+    let icon = load_icon();
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Split Office — Research Prototype")
             .with_inner_size([1400.0, 900.0])
-            .with_min_inner_size([800.0, 600.0]),
+            .with_min_inner_size([800.0, 600.0])
+            .with_icon(icon.unwrap_or_default()),
         ..Default::default()
     };
 
