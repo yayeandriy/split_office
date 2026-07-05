@@ -10,6 +10,10 @@ use workspace_core::Workspace;
 
 /// Render the workspace object explorer.
 pub fn object_explorer(ui: &mut Ui, workspace: &Workspace) {
+    let dark = ui.visuals().dark_mode;
+    let text_color = if dark { egui::Color32::from_rgb(200, 200, 220) } else { egui::Color32::from_rgb(30, 30, 50) };
+    let muted_color = if dark { egui::Color32::from_rgb(100, 100, 130) } else { egui::Color32::from_rgb(130, 130, 160) };
+
     ui.label(egui::RichText::new(&workspace.name).size(13.0).strong());
     ui.separator();
     ui.add_space(4.0);
@@ -28,7 +32,7 @@ pub fn object_explorer(ui: &mut Ui, workspace: &Workspace) {
             ui.label(
                 egui::RichText::new("  (empty)")
                     .size(11.0)
-                    .color(egui::Color32::from_rgb(100, 100, 130)),
+                    .color(muted_color),
             );
         } else {
             for obj in objects {
@@ -38,7 +42,7 @@ pub fn object_explorer(ui: &mut Ui, workspace: &Workspace) {
                     ui.label(
                         egui::RichText::new(obj.name())
                             .size(12.0)
-                            .color(egui::Color32::from_rgb(200, 200, 220)),
+                            .color(text_color),
                     );
                 });
             }
@@ -50,6 +54,6 @@ pub fn object_explorer(ui: &mut Ui, workspace: &Workspace) {
     ui.label(
         egui::RichText::new(format!("{} objects", workspace.object_count()))
             .size(10.0)
-            .color(egui::Color32::from_rgb(100, 100, 130)),
+            .color(muted_color),
     );
 }

@@ -87,11 +87,22 @@ impl PerfOverlay {
             .order(egui::Order::Foreground)
             .movable(true)
             .show(ctx, |ui| {
+                let dark = ui.visuals().dark_mode;
+                let fill = if dark {
+                    egui::Color32::from_rgba_premultiplied(10, 10, 18, 210)
+                } else {
+                    egui::Color32::from_rgba_premultiplied(250, 250, 255, 230)
+                };
+                let stroke_color = if dark {
+                    egui::Color32::from_rgb(50, 50, 70)
+                } else {
+                    egui::Color32::from_rgb(190, 190, 210)
+                };
                 egui::Frame::new()
-                    .fill(egui::Color32::from_rgba_premultiplied(10, 10, 18, 210))
+                    .fill(fill)
                     .corner_radius(6.0)
                     .inner_margin(10.0)
-                    .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(50, 50, 70)))
+                    .stroke(egui::Stroke::new(1.0, stroke_color))
                     .show(ui, |ui| {
                         // Title bar with close button.
                         ui.horizontal(|ui| {

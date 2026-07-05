@@ -22,34 +22,41 @@ use egui::{Color32, RichText, Ui};
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
 // All colours must be defined here — never inline at call sites.
+// Theme-aware: picks dark/light variant based on ui.visuals().dark_mode.
 
-/// Primary body text colour.
-const COLOR_TEXT: Color32 = Color32::from_rgb(220, 220, 230);
+fn color_text(dark: bool) -> Color32 {
+    if dark { Color32::from_rgb(220, 220, 230) } else { Color32::from_rgb(30, 30, 50) }
+}
 
-/// Muted / secondary text colour (placeholders, captions, keys in key-value pairs).
-const COLOR_MUTED: Color32 = Color32::from_rgb(120, 120, 145);
+fn color_muted(dark: bool) -> Color32 {
+    if dark { Color32::from_rgb(120, 120, 145) } else { Color32::from_rgb(120, 120, 145) }
+}
 
-/// Monospace / data value colour (numeric results, identifiers, raw values).
-const COLOR_MONO: Color32 = Color32::from_rgb(160, 210, 255);
+fn color_mono(dark: bool) -> Color32 {
+    if dark { Color32::from_rgb(160, 210, 255) } else { Color32::from_rgb(20, 80, 180) }
+}
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Render primary body text.
 #[inline]
 pub fn text(ui: &mut Ui, s: impl Into<String>) {
-    ui.label(RichText::new(s).color(COLOR_TEXT));
+    let dark = ui.visuals().dark_mode;
+    ui.label(RichText::new(s).color(color_text(dark)));
 }
 
 /// Render secondary / muted text (placeholders, captions, key labels).
 #[inline]
 pub fn muted(ui: &mut Ui, s: impl Into<String>) {
-    ui.label(RichText::new(s).color(COLOR_MUTED));
+    let dark = ui.visuals().dark_mode;
+    ui.label(RichText::new(s).color(color_muted(dark)));
 }
 
 /// Render a data value in monospace style (numbers, identifiers, raw values).
 #[inline]
 pub fn mono(ui: &mut Ui, s: impl Into<String>) {
-    ui.label(RichText::new(s).color(COLOR_MONO).monospace());
+    let dark = ui.visuals().dark_mode;
+    ui.label(RichText::new(s).color(color_mono(dark)).monospace());
 }
 
 /// Render a section heading followed by a separator.
@@ -57,6 +64,7 @@ pub fn mono(ui: &mut Ui, s: impl Into<String>) {
 /// Same size as body text — hierarchy comes from the separator, not font size.
 #[inline]
 pub fn section(ui: &mut Ui, s: impl Into<String>) {
-    ui.label(RichText::new(s).color(COLOR_TEXT));
+    let dark = ui.visuals().dark_mode;
+    ui.label(RichText::new(s).color(color_text(dark)));
     ui.separator();
 }

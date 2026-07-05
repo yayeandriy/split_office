@@ -123,8 +123,9 @@ fn render_modifier_card(
     columns: &[String],
     actions: &mut WorkflowActions,
 ) {
-    let card_bg = egui::Color32::from_rgb(22, 22, 32);
-    let card_border = egui::Color32::from_rgb(40, 40, 55);
+    let dark = ui.visuals().dark_mode;
+    let card_bg = if dark { egui::Color32::from_rgb(22, 22, 32) } else { egui::Color32::from_rgb(245, 245, 252) };
+    let card_border = if dark { egui::Color32::from_rgb(40, 40, 55) } else { egui::Color32::from_rgb(210, 210, 225) };
     let dim = if node.enabled { 1.0 } else { 0.45 };
 
     egui::Frame::new()
@@ -392,8 +393,9 @@ fn render_sort_settings(
 // ── Add Modifier ──────────────────────────────────────────────────────────────
 
 fn render_add_modifier(ui: &mut Ui, actions: &mut WorkflowActions) {
-    let add_bg = egui::Color32::from_rgb(25, 25, 38);
-    let add_border = egui::Color32::from_rgb(50, 60, 90);
+    let dark = ui.visuals().dark_mode;
+    let add_bg = if dark { egui::Color32::from_rgb(25, 25, 38) } else { egui::Color32::from_rgb(240, 240, 248) };
+    let add_border = if dark { egui::Color32::from_rgb(50, 60, 90) } else { egui::Color32::from_rgb(190, 195, 215) };
 
     egui::Frame::new()
         .fill(add_bg)

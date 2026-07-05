@@ -13,31 +13,81 @@ use crate::state::{GridAction, GridState};
 //
 // All colours must be declared here. No inline Color32::from_rgb literals
 // anywhere else in this file (constitution §Limited Visual Vocabulary).
-const BG_HEADER: Color32 = Color32::from_rgb(22, 22, 30);
-const BG_FILTER_ROW: Color32 = Color32::from_rgb(17, 17, 24);
-const BG_ROW_ODD: Color32 = Color32::from_rgb(18, 18, 26);
-const BG_ROW_EVEN: Color32 = Color32::from_rgb(24, 24, 33);
-const BG_ROW_SELECTED: Color32 = Color32::from_rgb(40, 70, 130);
-const BG_ROW_HOVER_ODD: Color32 = Color32::from_rgb(28, 28, 36);
-const BG_ROW_HOVER_EVEN: Color32 = Color32::from_rgb(34, 34, 43);
+const BG_HEADER_DARK: Color32 = Color32::from_rgb(22, 22, 30);
+const BG_FILTER_ROW_DARK: Color32 = Color32::from_rgb(17, 17, 24);
+const BG_ROW_ODD_DARK: Color32 = Color32::from_rgb(18, 18, 26);
+const BG_ROW_EVEN_DARK: Color32 = Color32::from_rgb(24, 24, 33);
+const BG_ROW_SELECTED_DARK: Color32 = Color32::from_rgb(40, 70, 130);
+const BG_ROW_HOVER_ODD_DARK: Color32 = Color32::from_rgb(28, 28, 36);
+const BG_ROW_HOVER_EVEN_DARK: Color32 = Color32::from_rgb(34, 34, 43);
 #[allow(dead_code)]
 const BG_HOVER: Color32 = Color32::from_rgba_premultiplied(255, 255, 255, 12);
-const FG_HEADER: Color32 = Color32::from_rgb(200, 200, 220);
-const FG_TYPE_LABEL: Color32 = Color32::from_rgb(100, 100, 130);
-const FG_CELL_TEXT: Color32 = Color32::from_rgb(220, 220, 230);
-const FG_CELL_NULL: Color32 = Color32::from_rgb(90, 90, 110);
-const FG_CELL_NUM: Color32 = Color32::from_rgb(130, 200, 255);
+const FG_HEADER_DARK: Color32 = Color32::from_rgb(200, 200, 220);
+const FG_TYPE_LABEL_DARK: Color32 = Color32::from_rgb(100, 100, 130);
+const FG_CELL_TEXT_DARK: Color32 = Color32::from_rgb(220, 220, 230);
+const FG_CELL_NULL_DARK: Color32 = Color32::from_rgb(90, 90, 110);
+const FG_CELL_NUM_DARK: Color32 = Color32::from_rgb(130, 200, 255);
 #[allow(dead_code)]
-const FG_SORT_ARROW: Color32 = Color32::from_rgb(80, 160, 255);
-const BORDER_COL: Color32 = Color32::from_rgb(40, 40, 55);
-const RESIZE_HANDLE: Color32 = Color32::from_rgb(60, 80, 140);
-const FILTER_BG: Color32 = Color32::from_rgb(30, 30, 42);
-const FILTER_BG_ACTIVE: Color32 = Color32::from_rgb(40, 50, 70);
-const FILTER_FOCUSED: Color32 = Color32::from_rgb(50, 60, 90);
-const FILTER_TEXT: Color32 = Color32::from_rgb(200, 200, 220);
-const FILTER_PLACEHOLDER: Color32 = Color32::from_rgb(70, 70, 100);
-const SCROLLBAR_BG: Color32 = Color32::from_rgb(15, 15, 22);
-const SCROLLBAR_THUMB: Color32 = Color32::from_rgb(60, 80, 140);
+const FG_SORT_ARROW_DARK: Color32 = Color32::from_rgb(80, 160, 255);
+const BORDER_COL_DARK: Color32 = Color32::from_rgb(40, 40, 55);
+const RESIZE_HANDLE_DARK: Color32 = Color32::from_rgb(60, 80, 140);
+const FILTER_BG_DARK: Color32 = Color32::from_rgb(30, 30, 42);
+const FILTER_BG_ACTIVE_DARK: Color32 = Color32::from_rgb(40, 50, 70);
+const FILTER_FOCUSED_DARK: Color32 = Color32::from_rgb(50, 60, 90);
+const FILTER_TEXT_DARK: Color32 = Color32::from_rgb(200, 200, 220);
+const FILTER_PLACEHOLDER_DARK: Color32 = Color32::from_rgb(70, 70, 100);
+const SCROLLBAR_BG_DARK: Color32 = Color32::from_rgb(15, 15, 22);
+const SCROLLBAR_THUMB_DARK: Color32 = Color32::from_rgb(60, 80, 140);
+
+// Light theme variants
+const BG_HEADER_LIGHT: Color32 = Color32::from_rgb(235, 235, 242);
+const BG_FILTER_ROW_LIGHT: Color32 = Color32::from_rgb(245, 245, 250);
+const BG_ROW_ODD_LIGHT: Color32 = Color32::from_rgb(255, 255, 255);
+const BG_ROW_EVEN_LIGHT: Color32 = Color32::from_rgb(248, 248, 252);
+const BG_ROW_SELECTED_LIGHT: Color32 = Color32::from_rgb(200, 220, 255);
+const BG_ROW_HOVER_ODD_LIGHT: Color32 = Color32::from_rgb(240, 245, 255);
+const BG_ROW_HOVER_EVEN_LIGHT: Color32 = Color32::from_rgb(235, 240, 250);
+const FG_HEADER_LIGHT: Color32 = Color32::from_rgb(40, 40, 60);
+const FG_TYPE_LABEL_LIGHT: Color32 = Color32::from_rgb(130, 130, 160);
+const FG_CELL_TEXT_LIGHT: Color32 = Color32::from_rgb(30, 30, 50);
+const FG_CELL_NULL_LIGHT: Color32 = Color32::from_rgb(160, 160, 180);
+const FG_CELL_NUM_LIGHT: Color32 = Color32::from_rgb(20, 80, 180);
+#[allow(dead_code)]
+const FG_SORT_ARROW_LIGHT: Color32 = Color32::from_rgb(60, 140, 240);
+const BORDER_COL_LIGHT: Color32 = Color32::from_rgb(210, 210, 225);
+const RESIZE_HANDLE_LIGHT: Color32 = Color32::from_rgb(120, 150, 220);
+const FILTER_BG_LIGHT: Color32 = Color32::from_rgb(238, 238, 245);
+const FILTER_BG_ACTIVE_LIGHT: Color32 = Color32::from_rgb(220, 225, 240);
+const FILTER_FOCUSED_LIGHT: Color32 = Color32::from_rgb(200, 210, 240);
+const FILTER_TEXT_LIGHT: Color32 = Color32::from_rgb(30, 30, 50);
+const FILTER_PLACEHOLDER_LIGHT: Color32 = Color32::from_rgb(160, 160, 180);
+const SCROLLBAR_BG_LIGHT: Color32 = Color32::from_rgb(235, 235, 242);
+const SCROLLBAR_THUMB_LIGHT: Color32 = Color32::from_rgb(150, 160, 200);
+
+macro_rules! gc {
+    ($dark:expr, BG_HEADER) => { if $dark { BG_HEADER_DARK } else { BG_HEADER_LIGHT } };
+    ($dark:expr, BG_FILTER_ROW) => { if $dark { BG_FILTER_ROW_DARK } else { BG_FILTER_ROW_LIGHT } };
+    ($dark:expr, BG_ROW_ODD) => { if $dark { BG_ROW_ODD_DARK } else { BG_ROW_ODD_LIGHT } };
+    ($dark:expr, BG_ROW_EVEN) => { if $dark { BG_ROW_EVEN_DARK } else { BG_ROW_EVEN_LIGHT } };
+    ($dark:expr, BG_ROW_SELECTED) => { if $dark { BG_ROW_SELECTED_DARK } else { BG_ROW_SELECTED_LIGHT } };
+    ($dark:expr, BG_ROW_HOVER_ODD) => { if $dark { BG_ROW_HOVER_ODD_DARK } else { BG_ROW_HOVER_ODD_LIGHT } };
+    ($dark:expr, BG_ROW_HOVER_EVEN) => { if $dark { BG_ROW_HOVER_EVEN_DARK } else { BG_ROW_HOVER_EVEN_LIGHT } };
+    ($dark:expr, FG_HEADER) => { if $dark { FG_HEADER_DARK } else { FG_HEADER_LIGHT } };
+    ($dark:expr, FG_TYPE_LABEL) => { if $dark { FG_TYPE_LABEL_DARK } else { FG_TYPE_LABEL_LIGHT } };
+    ($dark:expr, FG_CELL_TEXT) => { if $dark { FG_CELL_TEXT_DARK } else { FG_CELL_TEXT_LIGHT } };
+    ($dark:expr, FG_CELL_NULL) => { if $dark { FG_CELL_NULL_DARK } else { FG_CELL_NULL_LIGHT } };
+    ($dark:expr, FG_CELL_NUM) => { if $dark { FG_CELL_NUM_DARK } else { FG_CELL_NUM_LIGHT } };
+    ($dark:expr, FG_SORT_ARROW) => { if $dark { FG_SORT_ARROW_DARK } else { FG_SORT_ARROW_LIGHT } };
+    ($dark:expr, BORDER_COL) => { if $dark { BORDER_COL_DARK } else { BORDER_COL_LIGHT } };
+    ($dark:expr, RESIZE_HANDLE) => { if $dark { RESIZE_HANDLE_DARK } else { RESIZE_HANDLE_LIGHT } };
+    ($dark:expr, FILTER_BG) => { if $dark { FILTER_BG_DARK } else { FILTER_BG_LIGHT } };
+    ($dark:expr, FILTER_BG_ACTIVE) => { if $dark { FILTER_BG_ACTIVE_DARK } else { FILTER_BG_ACTIVE_LIGHT } };
+    ($dark:expr, FILTER_FOCUSED) => { if $dark { FILTER_FOCUSED_DARK } else { FILTER_FOCUSED_LIGHT } };
+    ($dark:expr, FILTER_TEXT) => { if $dark { FILTER_TEXT_DARK } else { FILTER_TEXT_LIGHT } };
+    ($dark:expr, FILTER_PLACEHOLDER) => { if $dark { FILTER_PLACEHOLDER_DARK } else { FILTER_PLACEHOLDER_LIGHT } };
+    ($dark:expr, SCROLLBAR_BG) => { if $dark { SCROLLBAR_BG_DARK } else { SCROLLBAR_BG_LIGHT } };
+    ($dark:expr, SCROLLBAR_THUMB) => { if $dark { SCROLLBAR_THUMB_DARK } else { SCROLLBAR_THUMB_LIGHT } };
+}
 
 // ── Font size tokens ──────────────────────────────────────────────────────────
 //
@@ -75,6 +125,7 @@ impl GridRenderer {
         state: &mut GridState,
         total_rows: usize,
     ) -> Vec<GridAction> {
+        let dark = ui.visuals().dark_mode;
         let mut actions = Vec::new();
 
         let available = ui.available_rect_before_wrap();
@@ -108,7 +159,7 @@ impl GridRenderer {
         let (grid_response, painter) = ui.allocate_painter(grid_rect.size(), Sense::click_and_drag());
 
         // ── 5. Background ──────────────────────────────────────────────────
-        painter.rect_filled(grid_rect, 0.0, BG_ROW_ODD);
+        painter.rect_filled(grid_rect, 0.0, gc!(dark, BG_ROW_ODD));
 
         // ── 6. Paint header + handle header clicks (sort) ─────────────────
         Self::paint_header(
@@ -236,15 +287,16 @@ impl GridRenderer {
         grid_response: &Response,
         actions: &mut Vec<GridAction>,
     ) {
+        let dark = ui.visuals().dark_mode;
         let header_rect = Rect::from_min_size(
             grid_rect.min,
             Vec2::new(grid_rect.width(), GridState::HEADER_HEIGHT),
         );
-        painter.rect_filled(header_rect, 0.0, BG_HEADER);
+        painter.rect_filled(header_rect, 0.0, gc!(dark, BG_HEADER));
         painter.rect_stroke(
             header_rect,
             0.0,
-            Stroke::new(1.0, BORDER_COL),
+            Stroke::new(1.0, gc!(dark, BORDER_COL)),
             StrokeKind::Inside,
         );
 
@@ -316,7 +368,7 @@ impl GridRenderer {
                 egui::Align2::LEFT_TOP,
                 &label,
                 font.clone(),
-                FG_HEADER,
+                gc!(dark, FG_HEADER),
             );
 
             // Type label in dimmer color.
@@ -328,7 +380,7 @@ impl GridRenderer {
                     egui::Align2::LEFT_TOP,
                     &type_label,
                     FontId::proportional(FONT_SIZE_TYPE_LABEL),
-                    FG_TYPE_LABEL,
+                    gc!(dark, FG_TYPE_LABEL),
                 );
 
             // Column border.
@@ -337,7 +389,7 @@ impl GridRenderer {
                     Pos2::new(col_rect.right().min(grid_rect.right()), grid_rect.top()),
                     Pos2::new(col_rect.right().min(grid_rect.right()), header_rect.bottom()),
                 ],
-                Stroke::new(1.0, BORDER_COL),
+                Stroke::new(1.0, gc!(dark, BORDER_COL)),
             );
 
             x += w;
@@ -355,6 +407,7 @@ impl GridRenderer {
         grid_response: &Response,
         actions: &mut Vec<GridAction>,
     ) {
+        let dark = ui.visuals().dark_mode;
         let filter_y = grid_rect.top() + GridState::HEADER_HEIGHT;
         let filter_rect = Rect::from_min_size(
             Pos2::new(grid_rect.left(), filter_y),
@@ -362,11 +415,11 @@ impl GridRenderer {
         );
 
         // Background.
-        painter.rect_filled(filter_rect, 0.0, BG_FILTER_ROW);
+        painter.rect_filled(filter_rect, 0.0, gc!(dark, BG_FILTER_ROW));
         painter.rect_stroke(
             filter_rect,
             0.0,
-            Stroke::new(1.0, BORDER_COL),
+            Stroke::new(1.0, gc!(dark, BORDER_COL)),
             StrokeKind::Inside,
         );
 
@@ -395,7 +448,7 @@ impl GridRenderer {
                         Pos2::new((x + w).min(grid_rect.right()), filter_y),
                         Pos2::new((x + w).min(grid_rect.right()), filter_y + GridState::FILTER_ROW_HEIGHT),
                     ],
-                    Stroke::new(1.0, BORDER_COL),
+                    Stroke::new(1.0, gc!(dark, BORDER_COL)),
                 );
                 x += w;
                 continue;
@@ -406,11 +459,11 @@ impl GridRenderer {
 
             // Filter input background.
             let bg = if is_focused {
-                FILTER_FOCUSED
+                gc!(dark, FILTER_FOCUSED)
             } else if has_filter {
-                FILTER_BG_ACTIVE
+                gc!(dark, FILTER_BG_ACTIVE)
             } else {
-                FILTER_BG
+                gc!(dark, FILTER_BG)
             };
             painter.rect_filled(col_filter_rect, 2.0, bg);
 
@@ -432,7 +485,7 @@ impl GridRenderer {
             };
 
             let is_placeholder = current_text.is_empty() && !is_focused;
-            let text_color = if is_placeholder { FILTER_PLACEHOLDER } else { FILTER_TEXT };
+            let text_color = if is_placeholder { gc!(dark, FILTER_PLACEHOLDER) } else { gc!(dark, FILTER_TEXT) };
 
             painter.with_clip_rect(col_filter_rect).text(
                 Pos2::new(col_filter_rect.left() + 4.0, col_filter_rect.center().y - 5.0),
@@ -448,7 +501,7 @@ impl GridRenderer {
                     Pos2::new((x + w).min(grid_rect.right()), filter_y),
                     Pos2::new((x + w).min(grid_rect.right()), filter_y + GridState::FILTER_ROW_HEIGHT),
                 ],
-                Stroke::new(1.0, BORDER_COL),
+                Stroke::new(1.0, gc!(dark, BORDER_COL)),
             );
 
             x += w;
@@ -535,6 +588,7 @@ impl GridRenderer {
         grid_response: &Response,
         actions: &mut Vec<GridAction>,
     ) {
+        let dark = _ui.visuals().dark_mode;
         let font = FontId::proportional(FONT_SIZE_CELL);
         let total_header_h = GridState::total_header_height();
         let data_rect = Rect::from_min_size(
@@ -579,17 +633,17 @@ impl GridRenderer {
             let is_hovered = hover_row == Some(local_row);
 
             let bg = if is_selected {
-                BG_ROW_SELECTED
+                gc!(dark, BG_ROW_SELECTED)
             } else if is_hovered {
                 if local_row % 2 == 0 {
-                    BG_ROW_HOVER_EVEN
+                    gc!(dark, BG_ROW_HOVER_EVEN)
                 } else {
-                    BG_ROW_HOVER_ODD
+                    gc!(dark, BG_ROW_HOVER_ODD)
                 }
             } else if local_row % 2 == 0 {
-                BG_ROW_EVEN
+                gc!(dark, BG_ROW_EVEN)
             } else {
-                BG_ROW_ODD
+                gc!(dark, BG_ROW_ODD)
             };
 
             // Row background.
@@ -605,7 +659,7 @@ impl GridRenderer {
                     Pos2::new(grid_rect.left(), row_y + GridState::ROW_HEIGHT),
                     Pos2::new(grid_rect.right(), row_y + GridState::ROW_HEIGHT),
                 ],
-                Stroke::new(1.0, BORDER_COL),
+                Stroke::new(1.0, gc!(dark, BORDER_COL)),
             );
 
             // Paint each cell.
@@ -639,11 +693,11 @@ impl GridRenderer {
                     .unwrap_or(false);
 
                 let color = if is_null {
-                    FG_CELL_NULL
+                    gc!(dark, FG_CELL_NULL)
                 } else if is_num {
-                    FG_CELL_NUM
+                    gc!(dark, FG_CELL_NUM)
                 } else {
-                    FG_CELL_TEXT
+                    gc!(dark, FG_CELL_TEXT)
                 };
 
                 let align = if is_num {
@@ -672,7 +726,7 @@ impl GridRenderer {
                             row_y + GridState::ROW_HEIGHT,
                         ),
                     ],
-                    Stroke::new(1.0, BORDER_COL),
+                    Stroke::new(1.0, gc!(dark, BORDER_COL)),
                 );
 
                 x += w;
@@ -695,6 +749,7 @@ impl GridRenderer {
         state: &mut GridState,
         grid_rect: Rect,
     ) {
+        let dark = ui.visuals().dark_mode;
         let mut x = grid_rect.left() - state.scroll_x;
 
         for col_idx in 0..dataset.schema.column_count() {
@@ -715,7 +770,7 @@ impl GridRenderer {
 
             if handle_response.hovered() {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeColumn);
-                painter.rect_filled(handle_rect, 0.0, RESIZE_HANDLE);
+                painter.rect_filled(handle_rect, 0.0, gc!(dark, RESIZE_HANDLE));
             }
 
             if handle_response.drag_started() {
@@ -749,13 +804,14 @@ impl GridRenderer {
         first_row: usize,
         visible_rows: usize,
     ) -> Option<usize> {
+        let dark = ui.visuals().dark_mode;
         if total_rows == 0 {
             return None;
         }
 
         let (response, painter) = ui.allocate_painter(rect.size(), Sense::click_and_drag());
         let painter = painter;
-        painter.rect_filled(rect, 0.0, SCROLLBAR_BG);
+        painter.rect_filled(rect, 0.0, gc!(dark, SCROLLBAR_BG));
 
         let thumb_ratio = (visible_rows as f32 / total_rows as f32).min(1.0);
         let thumb_h = (rect.height() * thumb_ratio).max(20.0);
@@ -767,7 +823,7 @@ impl GridRenderer {
             Pos2::new(rect.left() + 2.0, thumb_y),
             Vec2::new(rect.width() - 4.0, thumb_h),
         );
-        painter.rect_filled(thumb_rect, 4.0, SCROLLBAR_THUMB);
+        painter.rect_filled(thumb_rect, 4.0, gc!(dark, SCROLLBAR_THUMB));
 
         if response.dragged() {
             let delta = response.drag_delta().y;
@@ -797,12 +853,13 @@ impl GridRenderer {
         viewport_width: f32,
         scroll_x: &mut f32,
     ) {
+        let dark = ui.visuals().dark_mode;
         if content_width <= viewport_width {
             return;
         }
 
         let (response, painter) = ui.allocate_painter(rect.size(), Sense::click_and_drag());
-        painter.rect_filled(rect, 0.0, SCROLLBAR_BG);
+        painter.rect_filled(rect, 0.0, gc!(dark, SCROLLBAR_BG));
 
         let thumb_ratio = (viewport_width / content_width).min(1.0);
         let thumb_w = (rect.width() * thumb_ratio).max(20.0);
@@ -814,7 +871,7 @@ impl GridRenderer {
             Pos2::new(thumb_x, rect.top() + 2.0),
             Vec2::new(thumb_w, rect.height() - 4.0),
         );
-        painter.rect_filled(thumb_rect, 4.0, SCROLLBAR_THUMB);
+        painter.rect_filled(thumb_rect, 4.0, gc!(dark, SCROLLBAR_THUMB));
 
         if response.dragged() {
             let delta = response.drag_delta().x;

@@ -2,10 +2,12 @@
 Todo:
   ✔ UI Persistance @done(26-07-05 13:16)
   Workflow:
-    ☐ ability to add modifiers
-    ☐ add modifier settings
-    ☐ make it like the modifiers done in Blender
+    ✔ ability to add modifiers @done(26-07-05 20:32)
+    ✔ add modifier settings @done(26-07-05 20:32)
+    ✔ make it like the modifiers done in Blender @done(26-07-05 20:32)
   ☐ View: table cards 
+  Document editor:
+    ☐ split view
   Gemma:
      ☐ to set proper decimals
      ☐ to select proper view

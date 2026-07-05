@@ -7,6 +7,10 @@
 
 use document_core::{Block, Document, HeadingBlock, ParagraphBlock, ReferenceBlock, TableBlock};
 
+fn dc(dark: bool, d: (u8,u8,u8), l: (u8,u8,u8)) -> egui::Color32 {
+    if dark { egui::Color32::from_rgb(d.0, d.1, d.2) } else { egui::Color32::from_rgb(l.0, l.1, l.2) }
+}
+
 /// Render a full document into the egui UI.
 pub fn render_document(ui: &mut egui::Ui, doc: &Document) {
     egui::ScrollArea::vertical().show(ui, |ui| {
@@ -46,6 +50,7 @@ fn render_block(ui: &mut egui::Ui, block: &Block) {
 }
 
 fn render_heading(ui: &mut egui::Ui, heading: &HeadingBlock) {
+    let dark = ui.visuals().dark_mode;
     let size = match heading.level {
         1 => 16.0,
         2 => 14.0,
@@ -56,23 +61,25 @@ fn render_heading(ui: &mut egui::Ui, heading: &HeadingBlock) {
         egui::RichText::new(&heading.text)
             .size(size)
             .strong()
-            .color(egui::Color32::from_rgb(220, 220, 230)),
+            .color(dc(dark, (220, 220, 230), (30, 30, 50))),
     );
     ui.add_space(2.0);
 }
 
 fn render_paragraph(ui: &mut egui::Ui, para: &ParagraphBlock) {
+    let dark = ui.visuals().dark_mode;
     ui.add_space(2.0);
     ui.label(
         egui::RichText::new(&para.text)
             .size(13.0)
-            .color(egui::Color32::from_rgb(180, 180, 200)),
+            .color(dc(dark, (180, 180, 200), (70, 70, 90))),
     );
 }
 
 fn render_reference(ui: &mut egui::Ui, ref_block: &ReferenceBlock) {
-    let bg = egui::Color32::from_rgb(25, 25, 38);
-    let border = egui::Color32::from_rgb(50, 60, 90);
+    let dark = ui.visuals().dark_mode;
+    let bg = dc(dark, (25, 25, 38), (240, 240, 248));
+    let border = dc(dark, (50, 60, 90), (200, 205, 225));
 
     egui::Frame::new()
         .fill(bg)
@@ -85,12 +92,12 @@ fn render_reference(ui: &mut egui::Ui, ref_block: &ReferenceBlock) {
                 ui.label(
                     egui::RichText::new(&ref_block.label)
                         .size(12.0)
-                        .color(egui::Color32::from_rgb(130, 200, 255)),
+                        .color(dc(dark, (130, 200, 255), (20, 80, 180))),
                 );
                 ui.label(
                     egui::RichText::new(format!("({})", ref_block.target))
                         .size(10.0)
-                        .color(egui::Color32::from_rgb(100, 100, 130)),
+                        .color(dc(dark, (100, 100, 130), (130, 130, 160))),
                 );
             });
         });
@@ -99,8 +106,9 @@ fn render_reference(ui: &mut egui::Ui, ref_block: &ReferenceBlock) {
 }
 
 fn render_table(ui: &mut egui::Ui, table: &TableBlock) {
-    let bg = egui::Color32::from_rgb(22, 22, 32);
-    let border = egui::Color32::from_rgb(40, 40, 55);
+    let dark = ui.visuals().dark_mode;
+    let bg = dc(dark, (22, 22, 32), (245, 245, 252));
+    let border = dc(dark, (40, 40, 55), (210, 210, 225));
 
     egui::Frame::new()
         .fill(bg)
@@ -115,7 +123,7 @@ fn render_table(ui: &mut egui::Ui, table: &TableBlock) {
             ui.label(
                 egui::RichText::new(format!("Source: {}", table.source))
                     .size(10.0)
-                    .color(egui::Color32::from_rgb(100, 100, 130)),
+                    .color(dc(dark, (100, 100, 130), (130, 130, 160))),
             );
         });
 
