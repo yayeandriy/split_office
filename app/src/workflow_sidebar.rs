@@ -402,7 +402,9 @@ fn render_add_modifier(ui: &mut Ui, actions: &mut WorkflowActions) {
         .inner_margin(egui::Margin::symmetric(8, 4))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("+ Add Modifier").size(12.0));
+                ui.vertical_centered(|ui| {
+                    ui.label(egui::RichText::new("+ Add Modifier").size(12.0));
+                });
                 ui.add_space(8.0);
 
                 if action_button(ui, "Filter", "Add a filter step") {
