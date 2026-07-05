@@ -1,0 +1,9 @@
+[package]
+name = "document_view"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+document_core = { path = "../document_core" }
+cdm = { path = "../cdm" }
+egui.workspace = true

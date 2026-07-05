@@ -1,0 +1,8 @@
+[package]
+name = "document_core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cdm = { path = "../cdm" }
+serde.workspace = true

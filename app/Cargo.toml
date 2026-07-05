@@ -14,6 +14,9 @@ query = { path = "../query" }
 grid = { path = "../grid" }
 profiler = { path = "../profiler" }
 workflow = { path = "../workflow" }
+document_core = { path = "../document_core" }
+document_view = { path = "../document_view" }
+cdm = { path = "../cdm" }
 eframe.workspace = true
 egui.workspace = true
 arrow.workspace = true

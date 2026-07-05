@@ -24,6 +24,8 @@ use crate::label;
 use crate::panels;
 use crate::perf::PerfOverlay;
 use crate::workflow_sidebar;
+use cdm::{IdGenerator, ObjectId};
+use document_core::{Block, Document, HeadingBlock, ParagraphBlock, ReferenceBlock, Section, TableBlock};
 
 // ── Background messages ───────────────────────────────────────────────────────
 
@@ -63,6 +65,9 @@ struct UiPersist {
     /// Last inspected column name.
     #[serde(default)]
     inspected_col: Option<String>,
+    /// Document view visibility.
+    #[serde(default)]
+    show_document: bool,
 }
 
 fn default_true() -> bool { true }
@@ -79,6 +84,7 @@ impl Default for UiPersist {
             show_inspector_panel: true,
             perf_visible: false,
             inspected_col: None,
+            show_document: false,
         }
     }
 }
@@ -118,6 +124,12 @@ pub struct SplitOfficeApp {
     persist: UiPersist,
     /// Which modifier cards are currently expanded for settings editing.
     expanded_modifiers: HashSet<workflow::NodeId>,
+
+    // ── CDM & Document ──────────────────────────────────────────────────
+    /// ID generator for CDM objects.
+    id_gen: cdm::IdGenerator,
+    /// The workspace document (CDM consumer).
+    document: document_core::Document,
 }
 
 impl SplitOfficeApp {
@@ -153,6 +165,8 @@ impl SplitOfficeApp {
             status_message: "Drop a Parquet or CSV file to open it.".to_string(),
             persist,
             expanded_modifiers: HashSet::new(),
+            id_gen: IdGenerator::new(),
+            document: Self::create_sample_document(),
 
         };
 
@@ -168,6 +182,47 @@ impl SplitOfficeApp {
         }
 
         app
+    }
+
+    // ── Document factory ─────────────────────────────────────────────────
+
+    fn create_sample_document() -> Document {
+        let mut gen = IdGenerator::new();
+        let doc_id = gen.next();
+
+        let mut doc = Document::new(doc_id, "Analysis Report");
+
+        // Section 1: Executive Summary
+        let sec1_id = gen.next();
+        let mut section1 = Section::new(sec1_id, "Executive Summary");
+        section1.add_block(Block::Heading(HeadingBlock::new(gen.next(), 1, "Overview")));
+        section1.add_block(Block::Paragraph(ParagraphBlock::new(
+            gen.next(),
+            "This report provides an analysis of the production dataset. Key metrics and trends are summarized below.",
+        )));
+        section1.add_block(Block::Reference(ReferenceBlock {
+            id: gen.next(),
+            target: ObjectId::new(1),
+            label: "Production Dataset".into(),
+        }));
+        doc.sections = vec![section1];
+
+        // Section 2: Methodology
+        let sec2_id = gen.next();
+        let mut section2 = Section::new(sec2_id, "Methodology");
+        section2.add_block(Block::Heading(HeadingBlock::new(gen.next(), 2, "Data Processing")));
+        section2.add_block(Block::Paragraph(ParagraphBlock::new(
+            gen.next(),
+            "Data was loaded from Parquet format and processed through a filter → sort pipeline. Statistical profiling was performed to identify patterns.",
+        )));
+        section2.add_block(Block::Table(TableBlock {
+            id: gen.next(),
+            source: ObjectId::new(1),
+            caption: "Column Statistics".into(),
+        }));
+        doc.sections.push(section2);
+
+        doc
     }
 
     // ── File loading ──────────────────────────────────────────────────────────
@@ -403,6 +458,36 @@ impl SplitOfficeApp {
         }
     }
 
+    fn show_status_bar(&self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            label::text(ui, &self.status_message);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if self.grid_state.has_active_filters() {
+                    let count = self.grid_state.column_filters.len();
+                    label::text(ui, format!(
+                        "Filtering {} col{} · Showing {} rows",
+                        count,
+                        if count > 1 { "s" } else { "" },
+                        fmt_large(self.total_rows)
+                    ));
+                    ui.separator();
+                }
+                if !self.grid_state.sort_specs.is_empty() {
+                    let labels: Vec<String> = self
+                        .grid_state
+                        .sort_specs
+                        .iter()
+                        .map(|s| format!("{} {}", s.column, s.direction.arrow_label()))
+                        .collect();
+                    label::text(ui, format!("Sorted: {}", labels.join(", ")));
+                }
+            });
+        });
+    }
+
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+
     fn apply_filter(&mut self) {
         let filters: Vec<(String, String)> = self
             .grid_state
@@ -414,7 +499,6 @@ impl SplitOfficeApp {
         let expr = if filters.is_empty() {
             FilterExpr::None
         } else {
-            // AND together all column filters.
             let mut exprs: Vec<FilterExpr> = filters
                 .into_iter()
                 .map(|(col, text)| FilterExpr::Contains { column: col, pattern: text })
@@ -426,7 +510,6 @@ impl SplitOfficeApp {
             expr
         };
 
-        // Update the Filter node in the workflow graph.
         if let Some(ids) = &self.workflow_ids {
             let filter_id = ids.filter;
             let _ = self.workflow.update_payload(
@@ -441,8 +524,6 @@ impl SplitOfficeApp {
         self.refresh_count();
         self.fetch_page();
     }
-
-    // ── UI helpers ────────────────────────────────────────────────────────────
 
     fn show_toolbar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
@@ -505,34 +586,8 @@ impl SplitOfficeApp {
             }
         });
     }
-
-    fn show_status_bar(&self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            label::text(ui, &self.status_message);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if self.grid_state.has_active_filters() {
-                    let count = self.grid_state.column_filters.len();
-                    label::text(ui, format!(
-                        "Filtering {} col{} · Showing {} rows",
-                        count,
-                        if count > 1 { "s" } else { "" },
-                        fmt_large(self.total_rows)
-                    ));
-                    ui.separator();
-                }
-                if !self.grid_state.sort_specs.is_empty() {
-                    let labels: Vec<String> = self
-                        .grid_state
-                        .sort_specs
-                        .iter()
-                        .map(|s| format!("{} {}", s.column, s.direction.arrow_label()))
-                        .collect();
-                    label::text(ui, format!("Sorted: {}", labels.join(", ")));
-                }
-            });
-        });
-    }
 }
+
 
 // ── eframe::App impl ─────────────────────────────────────────────────────────
 
@@ -588,6 +643,10 @@ impl eframe::App for SplitOfficeApp {
                         ui.separator();
                         if ui.selectable_label(self.perf.visible, "Performance Overlay").clicked() {
                             self.perf.visible = !self.perf.visible;
+                            ui.close();
+                        }
+                        if ui.selectable_label(self.persist.show_document, "Document View").clicked() {
+                            self.persist.show_document = !self.persist.show_document;
                             ui.close();
                         }
                     });
@@ -761,6 +820,26 @@ impl eframe::App for SplitOfficeApp {
             }
         });
 
+        // ── Document View (bottom panel) ─────────────────────────────────
+        if self.persist.show_document {
+            egui::Panel::bottom("document_panel")
+                .resizable(true)
+                .show(ui, |ui: &mut egui::Ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("📄 Document").size(13.0).strong());
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.small_button("×").on_hover_text("Close document view").clicked() {
+                                    self.persist.show_document = false;
+                                }
+                            });
+                        });
+                    });
+                    ui.separator();
+                    document_view::render_document(ui, &self.document);
+                });
+        }
+
         // Performance overlay (always on top).
         self.perf.show(ui.ctx());
 
@@ -776,5 +855,3 @@ impl eframe::App for SplitOfficeApp {
         ctx.request_repaint();
     }
 }
-
-
