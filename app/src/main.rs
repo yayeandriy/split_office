@@ -44,6 +44,18 @@ fn main() -> eframe::Result<()> {
             visuals.window_fill = egui::Color32::from_rgb(14, 14, 20);
             visuals.panel_fill = egui::Color32::from_rgb(14, 14, 20);
             cc.egui_ctx.set_visuals(visuals);
+
+            // ── Global button styling ──────────────────────────────────────
+            let mut style = (*cc.egui_ctx.global_style()).clone();
+            // Symmetric padding: same horizontal and vertical.
+            style.spacing.button_padding = egui::Vec2::new(8.0, 8.0);
+            // Rounded button corners (u8 in egui 0.35).
+            let r: egui::CornerRadius = 5_u8.into();
+            style.visuals.widgets.inactive.corner_radius = r;
+            style.visuals.widgets.hovered.corner_radius = r;
+            style.visuals.widgets.active.corner_radius = r;
+            cc.egui_ctx.set_global_style(style);
+
             Ok(Box::new(app::SplitOfficeApp::new(cc)))
         }),
     )

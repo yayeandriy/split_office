@@ -44,9 +44,7 @@ impl WorkflowActions {
 fn action_button(ui: &mut Ui, label: &str, hover: &str) -> bool {
     ui.add_sized(
         [32.0, 22.0],
-        egui::Button::new(egui::RichText::new(label).size(12.0))
-            .corner_radius(5)
-            .min_size(egui::Vec2::new(32.0, 22.0)),
+        egui::Button::new(egui::RichText::new(label).size(12.0)),
     )
     .on_hover_text(hover)
     .clicked()
@@ -55,9 +53,7 @@ fn action_button(ui: &mut Ui, label: &str, hover: &str) -> bool {
 fn action_button_small(ui: &mut Ui, label: &str, hover: &str) -> bool {
     ui.add_sized(
         [22.0, 18.0],
-        egui::Button::new(egui::RichText::new(label).size(11.0))
-            .corner_radius(4)
-            .min_size(egui::Vec2::new(22.0, 18.0)),
+        egui::Button::new(egui::RichText::new(label).size(11.0)),
     )
     .on_hover_text(hover)
     .clicked()
