@@ -42,21 +42,15 @@ impl WorkflowActions {
 
 /// A consistently-sized compact action button with rounded corners.
 fn action_button(ui: &mut Ui, label: &str, hover: &str) -> bool {
-    ui.add_sized(
-        [32.0, 22.0],
-        egui::Button::new(egui::RichText::new(label).size(12.0)),
-    )
-    .on_hover_text(hover)
-    .clicked()
+    ui.button(egui::RichText::new(label).size(12.0))
+        .on_hover_text(hover)
+        .clicked()
 }
 
 fn action_button_small(ui: &mut Ui, label: &str, hover: &str) -> bool {
-    ui.add_sized(
-        [22.0, 18.0],
-        egui::Button::new(egui::RichText::new(label).size(11.0)),
-    )
-    .on_hover_text(hover)
-    .clicked()
+    ui.button(egui::RichText::new(label).size(11.0))
+        .on_hover_text(hover)
+        .clicked()
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
