@@ -1,24 +1,7 @@
 //! Workflow modifier stack panel — Blender-style.
 //!
-//! # Spec: Workflow UI — Blender-Style Modifier Stack
-//!
-//! Each modifier card can be expanded to reveal editable settings:
-//! - Filter: expression text input
-//! - Sort: column name + direction toggle
-//! - Aggregate: group-by + aggregate function inputs
-//! - Derived Column: name + expression inputs
-//!
-//! ```text
-//! ┌─ ▽ Filter ────────── [▶] [✓] [▲][▼] [×] ─●─┐
-//! │  country = "US"                              │
-//! └──────────────────────────────────────────────┘
-//! ┌─ ▽ Filter ────────── [▼] [✓] [▲][▼] [×] ─●─┐  ← expanded
-//! │  Column: [country        ▾]                  │
-//! │  Contains: [US___________]                   │
-//! │  ─────────────────────────────────           │
-//! │  Where: country ∋ "US"                       │
-//! └──────────────────────────────────────────────┘
-//! ```
+//! Each modifier card can be expanded to reveal editable settings.
+//! Column selectors use ComboBox dropdowns populated from the dataset schema.
 
 use egui::Ui;
 use std::collections::HashSet;
@@ -28,7 +11,6 @@ use workflow::{ExecutionState, NodeId, NodeKind, NodePayload, WorkflowGraph, Wor
 
 // ── Action types ──────────────────────────────────────────────────────────────
 
-/// Actions the modifier stack panel wants the app to perform.
 #[derive(Debug, Default)]
 pub struct WorkflowActions {
     pub remove: Vec<NodeId>,
@@ -37,11 +19,8 @@ pub struct WorkflowActions {
     pub toggle: Vec<NodeId>,
     pub duplicate: Vec<NodeId>,
     pub add_modifier: Option<NodeKind>,
-    /// Payload updates from settings edits: (node_id, new_payload).
     pub settings_changes: Vec<(NodeId, NodePayload)>,
-    /// Nodes to expand (clicked expand button).
     pub expand: Vec<NodeId>,
-    /// Nodes to collapse.
     pub collapse: Vec<NodeId>,
 }
 
@@ -59,14 +38,37 @@ impl WorkflowActions {
     }
 }
 
+// ── Button helpers ────────────────────────────────────────────────────────────
+
+/// A consistently-sized compact action button matching body text.
+fn action_button(ui: &mut Ui, label: &str, hover: &str) -> bool {
+    ui.add_sized(
+        [22.0, 18.0],
+        egui::Button::new(egui::RichText::new(label).size(12.0)),
+    )
+    .on_hover_text(hover)
+    .clicked()
+}
+
+fn action_button_small(ui: &mut Ui, label: &str, hover: &str) -> bool {
+    ui.add_sized(
+        [18.0, 16.0],
+        egui::Button::new(egui::RichText::new(label).size(11.0)),
+    )
+    .on_hover_text(hover)
+    .clicked()
+}
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
 /// Render the modifier stack panel into `ui`.
 ///
-/// `expanded` tracks which modifier is currently expanded for settings editing.
+/// `columns` — available column names from the dataset schema (for dropdowns).
+/// `expanded` — tracks which modifier cards are open for settings editing.
 pub fn workflow_panel(
     ui: &mut Ui,
     graph: &WorkflowGraph,
+    columns: &[String],
     expanded: &mut HashSet<NodeId>,
 ) -> WorkflowActions {
     let mut actions = WorkflowActions::default();
@@ -95,7 +97,7 @@ pub fn workflow_panel(
             let is_last = idx == ordered.len() - 1;
             let is_expanded = expanded.contains(&id);
 
-            render_modifier_card(ui, id, node, is_first, is_last, is_expanded, &mut actions);
+            render_modifier_card(ui, id, node, is_first, is_last, is_expanded, columns, &mut actions);
         }
     }
 
@@ -103,11 +105,10 @@ pub fn workflow_panel(
     ui.add_space(6.0);
     render_add_modifier(ui, &mut actions);
 
-    // Apply expand/collapse toggles from user clicks.
+    // Apply expand/collapse toggles.
     for id in &actions.expand {
         if expanded.contains(id) {
             expanded.remove(id);
-            actions.collapse.push(*id);
         } else {
             expanded.insert(*id);
         }
@@ -125,6 +126,7 @@ fn render_modifier_card(
     is_first: bool,
     is_last: bool,
     is_expanded: bool,
+    columns: &[String],
     actions: &mut WorkflowActions,
 ) {
     let card_bg = egui::Color32::from_rgb(22, 22, 32);
@@ -143,9 +145,9 @@ fn render_modifier_card(
 
             // ── Header row ────────────────────────────────────────────────
             ui.horizontal(|ui| {
-                // Expand/collapse toggle.
-                let expand_icon = if is_expanded { "▼" } else { "▶" };
-                if ui.small_button(expand_icon).on_hover_text("Expand / Collapse settings").clicked() {
+                // Expand/collapse.
+                let expand_icon = if is_expanded { "\u{25bc}" } else { "\u{25b6}" };
+                if action_button_small(ui, expand_icon, "Expand / Collapse settings") {
                     actions.expand.push(id);
                 }
 
@@ -159,7 +161,7 @@ fn render_modifier_card(
 
                 ui.add_space(4.0);
 
-                // Summary (truncated) — only when collapsed.
+                // Summary (only when collapsed).
                 if !is_expanded {
                     let summary = node.payload.summary();
                     if !summary.is_empty() && summary != "\u{2014}" {
@@ -176,32 +178,26 @@ fn render_modifier_card(
                             .size(10.0),
                     );
 
-                    ui.add_space(4.0);
-
-                    // Enable/disable toggle.
-                    let toggle_label = if node.enabled { "✓" } else { "—" };
-                    if ui.small_button(toggle_label).on_hover_text("Enable / Disable").clicked() {
+                    // Enable/disable.
+                    let toggle_label = if node.enabled { "\u{2713}" } else { "\u{2014}" };
+                    if action_button_small(ui, toggle_label, "Enable / Disable") {
                         actions.toggle.push(id);
                     }
 
-                    if !is_first
-                        && ui.small_button("▲").on_hover_text("Move up").clicked()
-                    {
+                    if !is_first && action_button_small(ui, "\u{25b2}", "Move up") {
                         actions.move_up.push(id);
                     }
 
-                    if !is_last
-                        && ui.small_button("▼").on_hover_text("Move down").clicked()
-                    {
+                    if !is_last && action_button_small(ui, "\u{25bc}", "Move down") {
                         actions.move_down.push(id);
                     }
 
-                    if ui.small_button("⤓").on_hover_text("Duplicate").clicked() {
+                    if action_button_small(ui, "\u{2913}", "Duplicate") {
                         actions.duplicate.push(id);
                     }
 
                     if node.kind != NodeKind::Dataset
-                        && ui.small_button("×").on_hover_text("Remove modifier").clicked()
+                        && action_button_small(ui, "\u{00d7}", "Remove modifier")
                     {
                         actions.remove.push(id);
                     }
@@ -211,7 +207,7 @@ fn render_modifier_card(
             // ── Expanded settings ─────────────────────────────────────────
             if is_expanded {
                 ui.separator();
-                render_modifier_settings(ui, id, node, actions);
+                render_modifier_settings(ui, id, node, columns, actions);
             }
 
             ui.allocate_space(egui::Vec2::new(0.0, 2.0));
@@ -220,23 +216,24 @@ fn render_modifier_card(
     ui.add_space(4.0);
 }
 
-// ── Modifier settings (editable parameters) ───────────────────────────────────
+// ── Modifier settings ─────────────────────────────────────────────────────────
 
 fn render_modifier_settings(
     ui: &mut Ui,
     id: NodeId,
     node: &WorkflowNode,
+    columns: &[String],
     actions: &mut WorkflowActions,
 ) {
     match &node.payload {
         NodePayload::Dataset { name: _ } => {
-            label::muted(ui, "Dataset source — no settings to edit.");
+            label::muted(ui, "Dataset source \u{2014} no settings to edit.");
         }
         NodePayload::Filter { expr } => {
-            render_filter_settings(ui, id, expr, actions);
+            render_filter_settings(ui, id, expr, columns, actions);
         }
         NodePayload::Sort { specs } => {
-            render_sort_settings(ui, id, specs, actions);
+            render_sort_settings(ui, id, specs, columns, actions);
         }
         NodePayload::Empty => {
             label::muted(ui, "No settings available for this modifier type.");
@@ -250,9 +247,9 @@ fn render_filter_settings(
     ui: &mut Ui,
     id: NodeId,
     expr: &core::FilterExpr,
+    columns: &[String],
     actions: &mut WorkflowActions,
 ) {
-    // Extract current contains filter fields for editing.
     let (mut col, mut pattern) = match expr {
         core::FilterExpr::Contains { column, pattern } => (column.clone(), pattern.clone()),
         core::FilterExpr::None => (String::new(), String::new()),
@@ -261,33 +258,45 @@ fn render_filter_settings(
 
     let mut changed = false;
 
+    // Column selector — ComboBox dropdown.
     ui.horizontal(|ui| {
-        ui.label("Column:");
-        let mut col_buf = col.clone();
-        if ui.text_edit_singleline(&mut col_buf).changed() {
-            col = col_buf;
+        ui.label(egui::RichText::new("Column:").size(12.0));
+        let prev = col.clone();
+        egui::ComboBox::from_id_salt(egui::Id::new(("filter_col", id)))
+            .width(140.0)
+            .selected_text(&col)
+            .show_ui(ui, |ui| {
+                for c in columns {
+                    ui.selectable_value(&mut col, c.clone(), c);
+                }
+                // Allow free-form text entry.
+                let mut free = col.clone();
+                if ui.text_edit_singleline(&mut free).changed() {
+                    col = free;
+                    changed = true;
+                }
+            });
+        if col != prev {
             changed = true;
         }
     });
 
+    // Pattern input.
     ui.horizontal(|ui| {
-        ui.label("Contains:");
+        ui.label(egui::RichText::new("Contains:").size(12.0));
         let mut pat_buf = pattern.clone();
-        if ui.text_edit_singleline(&mut pat_buf).changed() {
+        if ui.add_sized([120.0, 18.0], egui::TextEdit::singleline(&mut pat_buf)).changed() {
             pattern = pat_buf;
             changed = true;
         }
     });
 
-    // Quick filters.
-    ui.horizontal(|ui| {
-        if ui.small_button("Clear filter").clicked() {
-            actions.settings_changes.push((id, NodePayload::Filter {
-                expr: core::FilterExpr::None,
-            }));
-            return;
-        }
-    });
+    if ui.button("Clear filter").clicked() {
+        actions.settings_changes.push((id, NodePayload::Filter {
+            expr: core::FilterExpr::None,
+        }));
+        return;
+    }
 
     if changed {
         if col.is_empty() && pattern.is_empty() {
@@ -308,48 +317,68 @@ fn render_sort_settings(
     ui: &mut Ui,
     id: NodeId,
     specs: &[core::SortSpec],
+    columns: &[String],
     actions: &mut WorkflowActions,
 ) {
     if specs.is_empty() {
+        let mut col = String::new();
         ui.horizontal(|ui| {
-            ui.label("Column:");
-            let mut col_buf = String::new();
-            if ui.text_edit_singleline(&mut col_buf).changed() && !col_buf.is_empty() {
-                actions.settings_changes.push((id, NodePayload::Sort {
-                    specs: vec![core::SortSpec::desc(col_buf)],
-                }));
-            }
+            ui.label(egui::RichText::new("Column:").size(12.0));
+            egui::ComboBox::from_id_salt(egui::Id::new(("sort_col", id)))
+                .width(140.0)
+                .selected_text(if col.is_empty() { "\u{2014}" } else { &col })
+                .show_ui(ui, |ui| {
+                    for c in columns {
+                        if ui.selectable_label(false, c).clicked() {
+                            col = c.clone();
+                            actions.settings_changes.push((id, NodePayload::Sort {
+                                specs: vec![core::SortSpec::desc(&col)],
+                            }));
+                        }
+                    }
+                });
         });
         return;
     }
 
-    let spec = &specs[0]; // Edit first sort spec for now.
+    let spec = &specs[0];
     let mut column = spec.column.clone();
     let mut is_desc = spec.direction == core::SortDirection::Descending;
 
+    // Column selector.
+    let prev_col = column.clone();
     ui.horizontal(|ui| {
-        ui.label("Column:");
-        if ui.text_edit_singleline(&mut column).changed() {
-            let new_spec = if is_desc {
-                core::SortSpec::desc(&column)
-            } else {
-                core::SortSpec::asc(&column)
-            };
-            actions.settings_changes.push((id, NodePayload::Sort {
-                specs: vec![new_spec],
-            }));
-        }
+        ui.label(egui::RichText::new("Column:").size(12.0));
+        egui::ComboBox::from_id_salt(egui::Id::new(("sort_col2", id)))
+            .width(140.0)
+            .selected_text(&column)
+            .show_ui(ui, |ui| {
+                for c in columns {
+                    ui.selectable_value(&mut column, c.clone(), c);
+                }
+            });
     });
+    if column != prev_col {
+        let new_spec = if is_desc {
+            core::SortSpec::desc(&column)
+        } else {
+            core::SortSpec::asc(&column)
+        };
+        actions.settings_changes.push((id, NodePayload::Sort {
+            specs: vec![new_spec],
+        }));
+    }
 
+    // Direction toggle.
     ui.horizontal(|ui| {
-        ui.label("Direction:");
-        if ui.selectable_label(!is_desc, "↑ Ascending").clicked() {
+        ui.label(egui::RichText::new("Direction:").size(12.0));
+        if ui.selectable_label(!is_desc, "\u{2191} Ascending").clicked() {
             is_desc = false;
             actions.settings_changes.push((id, NodePayload::Sort {
                 specs: vec![core::SortSpec::asc(&column)],
             }));
         }
-        if ui.selectable_label(is_desc, "↓ Descending").clicked() {
+        if ui.selectable_label(is_desc, "\u{2193} Descending").clicked() {
             is_desc = true;
             actions.settings_changes.push((id, NodePayload::Sort {
                 specs: vec![core::SortSpec::desc(&column)],
@@ -357,7 +386,7 @@ fn render_sort_settings(
         }
     });
 
-    if ui.small_button("Clear sort").clicked() {
+    if ui.button("Clear sort").clicked() {
         actions.settings_changes.push((id, NodePayload::Sort {
             specs: vec![],
         }));
@@ -378,19 +407,18 @@ fn render_add_modifier(ui: &mut Ui, actions: &mut WorkflowActions) {
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("+ Add Modifier").size(12.0));
-
                 ui.add_space(8.0);
 
-                if ui.small_button("Filter").on_hover_text("Add a filter step").clicked() {
+                if action_button(ui, "Filter", "Add a filter step") {
                     actions.add_modifier = Some(NodeKind::Filter);
                 }
-                if ui.small_button("Sort").on_hover_text("Add a sort step").clicked() {
+                if action_button(ui, "Sort", "Add a sort step") {
                     actions.add_modifier = Some(NodeKind::Sort);
                 }
-                if ui.small_button("Aggregate").on_hover_text("Add an aggregation step").clicked() {
+                if action_button(ui, "Aggregate", "Add an aggregation step") {
                     actions.add_modifier = Some(NodeKind::Aggregate);
                 }
-                if ui.small_button("Derived").on_hover_text("Add a derived column").clicked() {
+                if action_button(ui, "Derived", "Add a derived column") {
                     actions.add_modifier = Some(NodeKind::DerivedColumn);
                 }
             });

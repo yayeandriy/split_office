@@ -628,9 +628,15 @@ impl eframe::App for SplitOfficeApp {
             .show(ui, |ui: &mut egui::Ui| {
                 if self.persist.show_workflow_panel {
                     if self.handle.is_some() {
+                        // Collect column names for dropdown selects.
+                        let columns: Vec<String> = self.handle.as_ref()
+                            .map(|h| h.dataset.schema.column_names().iter().map(|s| s.to_string()).collect())
+                            .unwrap_or_default();
+
                         let wf_actions = workflow_sidebar::workflow_panel(
                             ui,
                             &self.workflow,
+                            &columns,
                             &mut self.expanded_modifiers,
                         );
 
