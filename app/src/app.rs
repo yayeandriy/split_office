@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -115,6 +116,8 @@ pub struct SplitOfficeApp {
 
     // ── Persisted UI state ───────────────────────────────────────────────
     persist: UiPersist,
+    /// Which modifier cards are currently expanded for settings editing.
+    expanded_modifiers: HashSet<workflow::NodeId>,
 }
 
 impl SplitOfficeApp {
@@ -149,6 +152,7 @@ impl SplitOfficeApp {
             loading: false,
             status_message: "Drop a Parquet or CSV file to open it.".to_string(),
             persist,
+            expanded_modifiers: HashSet::new(),
 
         };
 
@@ -624,7 +628,11 @@ impl eframe::App for SplitOfficeApp {
             .show(ui, |ui: &mut egui::Ui| {
                 if self.persist.show_workflow_panel {
                     if self.handle.is_some() {
-                        let wf_actions = workflow_sidebar::workflow_panel(ui, &self.workflow);
+                        let wf_actions = workflow_sidebar::workflow_panel(
+                            ui,
+                            &self.workflow,
+                            &mut self.expanded_modifiers,
+                        );
 
                         // ── Process modifier stack actions ────────────────
                         let has_actions = !wf_actions.is_empty();
@@ -656,6 +664,10 @@ impl eframe::App for SplitOfficeApp {
                                     let _ = self.workflow.insert_node_at(i + 1, kind, payload);
                                 }
                             }
+                        }
+                        // Settings changes from editable modifier cards.
+                        for (node_id, new_payload) in wf_actions.settings_changes {
+                            let _ = self.workflow.update_payload(node_id, new_payload);
                         }
                         if let Some(kind) = wf_actions.add_modifier {
                             let payload = match kind {
