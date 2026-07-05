@@ -403,9 +403,12 @@ fn render_add_modifier(ui: &mut Ui, actions: &mut WorkflowActions) {
         .corner_radius(6.0)
         .inner_margin(egui::Margin::symmetric(8, 4))
         .show(ui, |ui| {
-            ui.vertical_centered(|ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("+ Add Modifier").size(12.0));
+                // Render as a non-interactive label with same padding as buttons.
+                ui.add(
+                    egui::Button::new(egui::RichText::new("+ Add Modifier").size(12.0))
+                        .frame(false),
+                );
                 ui.add_space(8.0);
 
                 if action_button(ui, "Filter", "Add a filter step") {
@@ -420,7 +423,6 @@ fn render_add_modifier(ui: &mut Ui, actions: &mut WorkflowActions) {
                 if action_button(ui, "Derived", "Add a derived column") {
                     actions.add_modifier = Some(NodeKind::DerivedColumn);
                 }
-            });
             });
         });
 }

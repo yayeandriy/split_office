@@ -48,7 +48,7 @@ fn main() -> eframe::Result<()> {
             // ── Global button styling ──────────────────────────────────────
             let mut style = (*cc.egui_ctx.global_style()).clone();
             // Symmetric padding: same horizontal and vertical.
-            style.spacing.button_padding = egui::Vec2::new(8.0, 8.0);
+            style.spacing.button_padding = egui::Vec2::new(10.0, 6.0);
             // Rounded button corners (u8 in egui 0.35).
             let r: egui::CornerRadius = 5_u8.into();
             style.visuals.widgets.inactive.corner_radius = r;
