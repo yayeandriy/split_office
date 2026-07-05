@@ -570,8 +570,7 @@ impl eframe::App for SplitOfficeApp {
         // Menu bar.
         egui::Panel::top("menu_bar")
             .show(ui, |ui: &mut egui::Ui| {
-                ui.vertical_centered(|ui| {
-                    ui.horizontal(|ui: &mut egui::Ui| {
+                ui.horizontal(|ui: &mut egui::Ui| {
                     ui.menu_button("View", |ui: &mut egui::Ui| {
                         ui.label("Panels");
                         if ui.selectable_label(self.persist.show_schema_panel, "Schema Panel").clicked() {
@@ -593,23 +592,18 @@ impl eframe::App for SplitOfficeApp {
                         }
                     });
                 });
-                }); // close vertical_centered
             });
 
         // Top toolbar.
         egui::Panel::top("toolbar")
             .show(ui, |ui: &mut egui::Ui| {
-                ui.vertical_centered(|ui| {
-                    self.show_toolbar(ui);
-                });
+                self.show_toolbar(ui);
             });
 
         // Status bar.
         egui::Panel::bottom("status")
             .show(ui, |ui: &mut egui::Ui| {
-                ui.vertical_centered(|ui| {
-                    self.show_status_bar(ui);
-                });
+                self.show_status_bar(ui);
             });
 
         // Left panel: schema — always rendered so eframe can persist its size.

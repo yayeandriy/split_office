@@ -404,10 +404,13 @@ fn render_add_modifier(ui: &mut Ui, actions: &mut WorkflowActions) {
         .inner_margin(egui::Margin::symmetric(8, 4))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                // Label matched to button height via vertical centering.
-                ui.vertical_centered(|ui| {
-                    ui.label(egui::RichText::new("+ Add Modifier").size(12.0));
-                });
+                // Use a button with no frame for baseline alignment.
+                let label_btn = egui::Button::new(
+                    egui::RichText::new("+ Add Modifier").size(12.0),
+                )
+                .frame(false)
+                .min_size(egui::Vec2::new(0.0, 0.0));
+                ui.add(label_btn);
                 ui.add_space(8.0);
 
                 if action_button(ui, "Filter", "Add a filter step") {
