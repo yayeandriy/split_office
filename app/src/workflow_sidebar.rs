@@ -40,11 +40,13 @@ impl WorkflowActions {
 
 // ── Button helpers ────────────────────────────────────────────────────────────
 
-/// A consistently-sized compact action button matching body text.
+/// A consistently-sized compact action button with rounded corners.
 fn action_button(ui: &mut Ui, label: &str, hover: &str) -> bool {
     ui.add_sized(
-        [22.0, 18.0],
-        egui::Button::new(egui::RichText::new(label).size(12.0)),
+        [26.0, 20.0],
+        egui::Button::new(egui::RichText::new(label).size(12.0))
+            .corner_radius(4)
+            .min_size(egui::Vec2::new(26.0, 20.0)),
     )
     .on_hover_text(hover)
     .clicked()
@@ -52,8 +54,10 @@ fn action_button(ui: &mut Ui, label: &str, hover: &str) -> bool {
 
 fn action_button_small(ui: &mut Ui, label: &str, hover: &str) -> bool {
     ui.add_sized(
-        [18.0, 16.0],
-        egui::Button::new(egui::RichText::new(label).size(11.0)),
+        [20.0, 16.0],
+        egui::Button::new(egui::RichText::new(label).size(11.0))
+            .corner_radius(3)
+            .min_size(egui::Vec2::new(20.0, 16.0)),
     )
     .on_hover_text(hover)
     .clicked()
@@ -139,6 +143,9 @@ fn render_modifier_card(
         .corner_radius(6.0)
         .inner_margin(egui::Margin::symmetric(8, 4))
         .show(ui, |ui| {
+            // Scope all widget IDs to this stable node ID so they
+            // don't shift when the card expands/collapses.
+            ui.push_id(id, |ui| {
             if !node.enabled {
                 ui.set_opacity(dim);
             }
@@ -203,6 +210,7 @@ fn render_modifier_card(
                     }
                 });
             });
+            }); // close ui.push_id scope
 
             // ── Expanded settings ─────────────────────────────────────────
             if is_expanded {
