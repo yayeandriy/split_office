@@ -624,9 +624,56 @@ impl eframe::App for SplitOfficeApp {
             .show(ui, |ui: &mut egui::Ui| {
                 if self.persist.show_workflow_panel {
                     if self.handle.is_some() {
-                        let to_remove = workflow_sidebar::workflow_panel(ui, &self.workflow);
-                        for node_id in to_remove {
-                            let _ = self.workflow.remove_node(node_id);
+                        let wf_actions = workflow_sidebar::workflow_panel(ui, &self.workflow);
+
+                        // ── Process modifier stack actions ────────────────
+                        let has_actions = !wf_actions.is_empty();
+
+                        for node_id in &wf_actions.remove {
+                            let _ = self.workflow.remove_node(*node_id);
+                        }
+                        for node_id in &wf_actions.move_up {
+                            let idx = self.workflow.nodes().position(|n| n.id == *node_id);
+                            if let Some(i) = idx {
+                                let _ = self.workflow.move_modifier_up(i);
+                            }
+                        }
+                        for node_id in &wf_actions.move_down {
+                            let idx = self.workflow.nodes().position(|n| n.id == *node_id);
+                            if let Some(i) = idx {
+                                let _ = self.workflow.move_modifier_down(i);
+                            }
+                        }
+                        for node_id in &wf_actions.toggle {
+                            let _ = self.workflow.toggle_node(*node_id);
+                        }
+                        for node_id in &wf_actions.duplicate {
+                            if let Some(node) = self.workflow.node(*node_id) {
+                                let kind = node.kind;
+                                let payload = node.payload.clone();
+                                let idx = self.workflow.nodes().position(|n| n.id == *node_id);
+                                if let Some(i) = idx {
+                                    let _ = self.workflow.insert_node_at(i + 1, kind, payload);
+                                }
+                            }
+                        }
+                        if let Some(kind) = wf_actions.add_modifier {
+                            let payload = match kind {
+                                workflow::NodeKind::Filter => workflow::NodePayload::Filter {
+                                    expr: core::FilterExpr::None,
+                                },
+                                workflow::NodeKind::Sort => workflow::NodePayload::Sort {
+                                    specs: vec![],
+                                },
+                                workflow::NodeKind::Aggregate => workflow::NodePayload::Empty,
+                                workflow::NodeKind::DerivedColumn => workflow::NodePayload::Empty,
+                                _ => workflow::NodePayload::Empty,
+                            };
+                            let _ = self.workflow.add_node(kind, payload);
+                        }
+
+                        // Rebuild query if any actions occurred.
+                        if has_actions {
                             self.fetch_page();
                             self.refresh_count();
                         }
