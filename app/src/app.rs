@@ -26,6 +26,7 @@ use crate::perf::PerfOverlay;
 use crate::workflow_sidebar;
 use cdm::{IdGenerator, ObjectId};
 use document_core::{Block, Document, HeadingBlock, ParagraphBlock, ReferenceBlock, Section, TableBlock};
+use workspace_core::{Workspace, WorkspaceObject};
 
 // ── Background messages ───────────────────────────────────────────────────────
 
@@ -68,6 +69,9 @@ struct UiPersist {
     /// Document view visibility.
     #[serde(default)]
     show_document: bool,
+    /// Object explorer visibility.
+    #[serde(default = "default_true")]
+    show_explorer: bool,
 }
 
 fn default_true() -> bool { true }
@@ -85,6 +89,7 @@ impl Default for UiPersist {
             perf_visible: false,
             inspected_col: None,
             show_document: false,
+            show_explorer: true,
         }
     }
 }
@@ -130,6 +135,8 @@ pub struct SplitOfficeApp {
     id_gen: cdm::IdGenerator,
     /// The workspace document (CDM consumer).
     document: document_core::Document,
+
+    workspace: Workspace,
 }
 
 impl SplitOfficeApp {
@@ -167,6 +174,7 @@ impl SplitOfficeApp {
             expanded_modifiers: HashSet::new(),
             id_gen: IdGenerator::new(),
             document: Self::create_sample_document(),
+            workspace: Workspace::new("My Workspace"),
 
         };
 
@@ -358,6 +366,18 @@ impl SplitOfficeApp {
                         .build();
                     self.workflow = graph;
                     self.workflow_ids = Some(ids);
+
+                    // ── Register in workspace ─────────────────────────────
+                    let obj_id = self.workspace.next_id();
+                    self.workspace.add_object(WorkspaceObject::Dataset(
+                        workspace_core::DatasetEntry {
+                            id: obj_id,
+                            name: handle.dataset.name.clone(),
+                            path: Some(handle.parquet_path.to_string_lossy().into_owned()),
+                            row_count: handle.dataset.row_count,
+                            col_count: handle.dataset.schema.column_count(),
+                        },
+                    ));
 
                     match QueryEngine::open(&handle) {
                         Ok(engine) => {
@@ -628,6 +648,10 @@ impl eframe::App for SplitOfficeApp {
                 ui.horizontal(|ui: &mut egui::Ui| {
                     ui.menu_button("View", |ui: &mut egui::Ui| {
                         ui.label("Panels");
+                        if ui.selectable_label(self.persist.show_explorer, "Object Explorer").clicked() {
+                            self.persist.show_explorer = !self.persist.show_explorer;
+                            ui.close();
+                        }
                         if ui.selectable_label(self.persist.show_schema_panel, "Schema Panel").clicked() {
                             self.persist.show_schema_panel = !self.persist.show_schema_panel;
                             ui.close();
@@ -664,6 +688,17 @@ impl eframe::App for SplitOfficeApp {
             .show(ui, |ui: &mut egui::Ui| {
                 self.show_status_bar(ui);
             });
+
+        // Object Explorer — always rendered.
+        if self.persist.show_explorer {
+            egui::Panel::left("explorer_panel")
+                .resizable(true)
+                .show(ui, |ui: &mut egui::Ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        crate::explorer::object_explorer(ui, &self.workspace);
+                    });
+                });
+        }
 
         // Left panel: schema — always rendered so eframe can persist its size.
         let schema_resp = egui::Panel::left("schema_panel")

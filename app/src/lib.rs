@@ -1,4 +1,5 @@
 pub mod app;
+pub mod explorer;
 pub mod fonts;
 pub mod label;
 pub mod perf;
