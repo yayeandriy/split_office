@@ -72,9 +72,13 @@ struct UiPersist {
     /// Object explorer visibility.
     #[serde(default = "default_true")]
     show_explorer: bool,
+    /// UI theme: "dark" or "light".
+    #[serde(default = "default_dark")]
+    theme: String,
 }
 
 fn default_true() -> bool { true }
+fn default_dark() -> String { "dark".into() }
 
 impl Default for UiPersist {
     fn default() -> Self {
@@ -90,6 +94,7 @@ impl Default for UiPersist {
             inspected_col: None,
             show_document: false,
             show_explorer: true,
+            theme: "dark".into(),
         }
     }
 }
@@ -622,6 +627,14 @@ impl eframe::App for SplitOfficeApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // ── Apply theme ──────────────────────────────────────────────────
+        let visuals = if self.persist.theme == "light" {
+            light_visuals()
+        } else {
+            dark_visuals()
+        };
+        ui.ctx().set_visuals(visuals);
+
         // Perf tracking.
         let now = Instant::now();
         let dt = now.duration_since(self.last_frame).as_secs_f64().max(0.0001);
@@ -671,6 +684,16 @@ impl eframe::App for SplitOfficeApp {
                         }
                         if ui.selectable_label(self.persist.show_document, "Document View").clicked() {
                             self.persist.show_document = !self.persist.show_document;
+                            ui.close();
+                        }
+                        ui.separator();
+                        let is_dark = self.persist.theme == "dark";
+                        if ui.selectable_label(is_dark, "Dark Theme").clicked() {
+                            self.persist.theme = "dark".into();
+                            ui.close();
+                        }
+                        if ui.selectable_label(!is_dark, "Light Theme").clicked() {
+                            self.persist.theme = "light".into();
                             ui.close();
                         }
                     });
@@ -889,4 +912,22 @@ impl eframe::App for SplitOfficeApp {
         // Drive continuous repainting for 60 FPS.
         ctx.request_repaint();
     }
+}
+
+// ── Theme helpers ────────────────────────────────────────────────────────────
+
+fn dark_visuals() -> egui::Visuals {
+    let mut v = egui::Visuals::dark();
+    v.override_text_color = Some(egui::Color32::from_rgb(220, 220, 230));
+    v.window_fill = egui::Color32::from_rgb(14, 14, 20);
+    v.panel_fill = egui::Color32::from_rgb(14, 14, 20);
+    v
+}
+
+fn light_visuals() -> egui::Visuals {
+    let mut v = egui::Visuals::light();
+    v.override_text_color = Some(egui::Color32::from_rgb(30, 30, 40));
+    v.window_fill = egui::Color32::from_rgb(248, 248, 252);
+    v.panel_fill = egui::Color32::from_rgb(245, 245, 250);
+    v
 }
