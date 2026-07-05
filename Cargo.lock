@@ -129,7 +129,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "app"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -137,6 +137,7 @@ dependencies = [
  "eframe",
  "egui",
  "grid",
+ "image",
  "parking_lot",
  "polars",
  "profiler",
@@ -673,7 +674,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "benchmark"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "core",
  "criterion",
@@ -1109,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "core"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "arrow",
  "serde",
@@ -1677,6 +1678,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "expression"
+version = "0.24.0"
+dependencies = [
+ "core",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2070,7 +2080,7 @@ dependencies = [
 
 [[package]]
 name = "grid"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "arrow",
  "core",
@@ -2729,6 +2739,15 @@ dependencies = [
  "libc",
  "plain",
  "redox_syscall 0.9.0",
+]
+
+[[package]]
+name = "lineage"
+version = "0.24.0"
+dependencies = [
+ "core",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4143,7 +4162,7 @@ dependencies = [
 
 [[package]]
 name = "profiler"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -4160,6 +4179,18 @@ name = "profiling"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
+
+[[package]]
+name = "project"
+version = "0.24.0"
+dependencies = [
+ "core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "transform",
+ "workflow",
+]
 
 [[package]]
 name = "psm"
@@ -4199,7 +4230,7 @@ checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
 name = "query"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -5122,7 +5153,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -5567,6 +5598,16 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "transform"
+version = "0.24.0"
+dependencies = [
+ "core",
+ "expression",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6601,7 +6642,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "workflow"
-version = "0.5.0"
+version = "0.24.0"
 dependencies = [
  "core",
  "serde",
