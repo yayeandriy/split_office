@@ -126,6 +126,7 @@ impl GridRenderer {
         state: &mut GridState,
         total_rows: usize,
         view_id: u64,
+        screen_rect: Rect,
     ) -> Vec<GridAction> {
         let dark = ui.visuals().dark_mode;
         let mut actions = Vec::new();
@@ -231,9 +232,11 @@ impl GridRenderer {
         );
 
         // ── 12. Mouse wheel scroll ─────────────────────────────────────────
-        if grid_response.hovered() {
+        let mouse_in_grid = ui.ctx().pointer_interact_pos()
+            .map_or(false, |p| screen_rect.contains(p));
+        if mouse_in_grid {
             let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
-            if scroll_delta.y.abs() > 0.5 {
+            if scroll_delta.y.abs() > 0.01 {
                 let old_first = first_row;
                 state.scroll_y = (state.scroll_y - scroll_delta.y).max(0.0);
                 let new_first = state.first_row();
@@ -245,7 +248,7 @@ impl GridRenderer {
                 }
                 ui.ctx().input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
             }
-            if scroll_delta.x.abs() > 0.5 {
+            if scroll_delta.x.abs() > 0.01 {
                 state.scroll_x = (state.scroll_x - scroll_delta.x).clamp(0.0, max_scroll_x);
                 ui.ctx().input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
             }

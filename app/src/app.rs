@@ -969,9 +969,10 @@ impl eframe::App for SplitOfficeApp {
                         if let Some(batch) = current_batch.clone() {
                             let height = ui.available_height();
                             new_visible_rows = Some(tab_gs.rows_in_viewport(height));
+                            let screen_rect = ui.clip_rect();
                             let actions = GridRenderer::show(
                                 ui, &h.dataset, &batch, &mut tab_gs, total_rows,
-                                vid.0,
+                                vid.0, screen_rect,
                             );
                             pending_grid_actions.extend(actions);
                         } else if loading {
