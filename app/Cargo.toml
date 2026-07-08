@@ -8,17 +8,17 @@ name = "split_office"
 path = "src/main.rs"
 
 [dependencies]
-core = { path = "../core" }
-storage = { path = "../storage" }
-query = { path = "../query" }
-grid = { path = "../grid" }
-profiler = { path = "../profiler" }
-workflow = { path = "../workflow" }
-document_core = { path = "../document_core" }
-document_view = { path = "../document_view" }
-cdm = { path = "../cdm" }
-workspace_core = { path = "../workspace_core" }
-split_view     = { path = "../split_view" }
+core = { path = "../crates/core" }
+storage = { path = "../crates/storage" }
+query = { path = "../crates/query" }
+grid = { path = "../crates/grid" }
+profiler = { path = "../crates/profiler" }
+workflow = { path = "../crates/workflow" }
+document_core = { path = "../crates/document_core" }
+document_view = { path = "../crates/document_view" }
+cdm = { path = "../crates/cdm" }
+workspace_core = { path = "../crates/workspace_core" }
+split_view     = { path = "../crates/split_view" }
 eframe.workspace = true
 egui.workspace = true
 arrow.workspace = true

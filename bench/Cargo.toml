@@ -5,9 +5,9 @@ edition.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
-storage = { path = "../storage" }
-query = { path = "../query" }
-core = { path = "../core" }
+storage = { path = "../crates/storage" }
+query = { path = "../crates/query" }
+core = { path = "../crates/core" }
 
 [[bench]]
 name = "grid_bench"
