@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use cdm::{IdGenerator, ObjectId};
 use document_core::{Block, Document, HeadingBlock, ParagraphBlock, ReferenceBlock, Section, TableBlock};
 use workspace_core::{Workspace, WorkspaceObject};
 use split_view::{
-    LayoutManager, LayoutState,
+    LayoutManager, LayoutState, ViewId,
     renderer::{TabAction, ViewContext},
 };
 
@@ -120,6 +120,10 @@ pub struct SplitOfficeApp {
     grid_state: GridState,
     current_batch: Option<RecordBatch>,
 
+    /// Per-tab grid state: each spreadsheet tab remembers its own scroll
+    /// position and selection independently (only underlying data is shared).
+    tab_grid_states: HashMap<ViewId, GridState>,
+
     inspected_col: Option<String>,
 
     perf: PerfOverlay,
@@ -177,6 +181,7 @@ impl SplitOfficeApp {
             viewport: Viewport::default(),
             total_rows: 0,
             grid_state: GridState::new(),
+            tab_grid_states: HashMap::new(),
             current_batch: None,
             inspected_col: persist.inspected_col.clone(),
             perf: PerfOverlay::new(),
@@ -926,12 +931,25 @@ impl eframe::App for SplitOfficeApp {
             let mut grid_state = self.grid_state.clone();
             let total_rows = self.total_rows;
             let document = self.document.clone();
+            let tab_grid_states = &mut self.tab_grid_states;
 
             let mut pending_grid_actions: Vec<GridAction> = Vec::new();
             let mut new_visible_rows: Option<usize> = None;
 
             let mut ctx = ViewContext {
-                render_spreadsheet: &mut |ui: &mut egui::Ui, _leaf| {
+                render_spreadsheet: &mut |ui: &mut egui::Ui, leaf| {
+                    // ── Per-tab state swap ────────────────────────────────
+                    let vid = leaf.view_id;
+                    let saved_scroll_y = grid_state.scroll_y;
+                    let saved_scroll_x = grid_state.scroll_x;
+                    let saved_selection = grid_state.selection.clone();
+
+                    if let Some(tab_gs) = tab_grid_states.get(&vid) {
+                        grid_state.scroll_y = tab_gs.scroll_y;
+                        grid_state.scroll_x = tab_gs.scroll_x;
+                        grid_state.selection = tab_gs.selection.clone();
+                    }
+
                     if let Some(h) = &handle {
                         if let Some(batch) = current_batch.clone() {
                             let height = ui.available_height();
@@ -962,6 +980,19 @@ impl eframe::App for SplitOfficeApp {
                             });
                         });
                     }
+
+                    // ── Save per-tab state ──────────────────────────────
+                    tab_grid_states.insert(vid, GridState {
+                        scroll_y: grid_state.scroll_y,
+                        scroll_x: grid_state.scroll_x,
+                        selection: grid_state.selection.clone(),
+                        ..Default::default()
+                    });
+
+                    // Restore active-tab state for query dispatch
+                    grid_state.scroll_y = saved_scroll_y;
+                    grid_state.scroll_x = saved_scroll_x;
+                    grid_state.selection = saved_selection;
                 },
                 render_document: &mut |ui: &mut egui::Ui, _leaf| {
                     document_view::render_document(ui, &document);
