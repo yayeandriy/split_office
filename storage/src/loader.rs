@@ -147,15 +147,17 @@ fn detect_separator(path: &Path) -> Result<u8> {
 
 /// Count rows in a Parquet file using DuckDB (reads metadata, not data).
 fn count_rows_parquet(path: &Path) -> Result<usize> {
-    // Use polars to scan and count — purely metadata-driven for parquet.
-    let lf = polars::prelude::LazyFrame::scan_parquet(
-        path.to_str().context("non-UTF-8 path")?,
-        polars::prelude::ScanArgsParquet::default(),
-    )?;
-    let count = lf
-        .select([polars::prelude::lit(1)])
-        .collect()
-        .context("count query failed")?
-        .height();
-    Ok(count)
+    let conn = duckdb::Connection::open_in_memory()
+        .context("failed to open DuckDB for row count")?;
+    let count: i64 = conn
+        .query_row(
+            &format!(
+                "SELECT COUNT(*) FROM parquet_scan('{}')",
+                path.to_str().context("non-UTF-8 path")?
+            ),
+            [],
+            |row| row.get(0),
+        )
+        .context("DuckDB count query failed")?;
+    Ok(count as usize)
 }
