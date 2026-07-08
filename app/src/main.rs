@@ -15,7 +15,7 @@ fn load_icon() -> Option<egui::IconData> {
 fn main() -> eframe::Result<()> {
     // Init logging.
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("app=debug".parse().unwrap()).add_directive("grid=debug".parse().unwrap()))
+        .with_env_filter(EnvFilter::from_default_env().add_directive("split_office=info".parse().unwrap()))
         .init();
 
     let icon = load_icon();

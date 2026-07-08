@@ -3,7 +3,7 @@ use egui::{
     Color32, CursorIcon, FontId, Key, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind,
     Ui, Vec2,
 };
-use tracing::debug;
+
 
 use core::Dataset;
 
@@ -237,14 +237,6 @@ impl GridRenderer {
                 let old_first = first_row;
                 state.scroll_y = (state.scroll_y - scroll_delta.y).max(0.0);
                 let new_first = state.first_row();
-                tracing::debug!(
-                    scroll_delta_y = scroll_delta.y,
-                    old_first,
-                    new_first,
-                    scroll_y = state.scroll_y,
-                    hovered = grid_response.hovered(),
-                    "mouse wheel scroll"
-                );
                 if new_first != old_first {
                     actions.push(GridAction::ScrollChanged {
                         first_row: new_first,

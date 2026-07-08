@@ -7,7 +7,7 @@ use std::time::Instant;
 use arrow::record_batch::RecordBatch;
 use egui::Ui;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use core::{fmt_large, FilterExpr, Viewport};
 use grid::{GridAction, GridRenderer, GridState};
@@ -490,13 +490,6 @@ impl SplitOfficeApp {
                     self.fetch_page();
                 }
                 GridAction::ScrollChanged { first_row, view_id } => {
-                    debug!(
-                        first_row,
-                        view_id,
-                        viewport_before = ?self.viewport,
-                        total_rows = self.total_rows,
-                        "ScrollChanged action"
-                    );
                     // Store per-tab viewport.
                     let vid = ViewId(view_id);
                     let vp = self.tab_viewports.entry(vid).or_insert(Viewport::default());
@@ -972,13 +965,6 @@ impl eframe::App for SplitOfficeApp {
                         .or_insert_with(GridState::new)
                         .clone();
 
-                    debug!(
-                        view_id = ?vid,
-                        scroll_y_before = tab_gs.scroll_y,
-                        scroll_x_before = tab_gs.scroll_x,
-                        "spreadsheet render start"
-                    );
-
                     if let Some(h) = &handle {
                         if let Some(batch) = current_batch.clone() {
                             let height = ui.available_height();
@@ -1012,12 +998,6 @@ impl eframe::App for SplitOfficeApp {
                     }
 
                     // ── Save per-tab state ──────────────────────────────
-                    debug!(
-                        view_id = ?vid,
-                        scroll_y_after = tab_gs.scroll_y,
-                        scroll_x_after = tab_gs.scroll_x,
-                        "spreadsheet render end — saving"
-                    );
                     if let Some(stored) = tab_grid_states.get_mut(&vid) {
                         *stored = tab_gs;
                     }
