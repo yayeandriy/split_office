@@ -1,0 +1,28 @@
+# Split Office — Windsurf Rules
+
+## Project
+
+Local-first analytical workbench in Rust/egui. Workspace-centric (not a spreadsheet). Split-pane layout where datasets, documents, and workflows are first-class objects.
+
+Stack: egui 0.35 · eframe wgpu · Apache Arrow · DuckDB · Polars · serde.
+
+## Structure
+
+All 15 library crates are in `crates/` (flat). Main binary: `app/`. Benchmarks: `bench/`. Docs: `docs/`. Full breakdown in `AGENTS.md`.
+
+## Rules
+
+- Domain crates (`workflow`, `transform`, `lineage`, `expression`) must NOT import `egui` or `eframe`.
+- `grid/src/renderer.rs`: all colours are top-level `const`; never add inline `Color32::from_rgb`.
+- No `unwrap()` in non-test code — use `anyhow::Result`.
+- Scroll hit-tests per split pane use `ui.available_rect_before_wrap()`, never `ui.clip_rect()`.
+- Background threads for DuckDB / Polars work; `mpsc::channel` for results.
+- Adding a new crate: place in `crates/`, add to workspace `Cargo.toml` members, update `README.md` Project Structure.
+
+## README Maintenance
+
+Update `README.md` in the same commit when: adding/removing a crate · adding a directory · landing a major feature · completing a roadmap phase. See `AGENTS.md → README Maintenance` for the full table.
+
+## Version bumps
+
+Pre-commit hook auto-bumps minor version. For docs-only commits: `SKIP_BUMP=1 git commit`.
