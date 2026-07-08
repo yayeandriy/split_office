@@ -239,9 +239,12 @@ impl GridRenderer {
                         first_row: new_first,
                     });
                 }
+                // Consume the delta so other tabs don't also scroll.
+                ui.ctx().input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
             }
             if scroll_delta.x.abs() > 0.5 {
                 state.scroll_x = (state.scroll_x - scroll_delta.x).clamp(0.0, max_scroll_x);
+                ui.ctx().input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
             }
         }
 
