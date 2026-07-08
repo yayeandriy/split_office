@@ -9,7 +9,7 @@ use egui::Ui;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use core::{fmt_large, FilterExpr, Viewport};
+use core::{fmt_large, FilterExpr, Selection, Viewport};
 use grid::{GridAction, GridRenderer, GridState};
 use profiler::DatasetProfile;
 use query::stats::DatasetStats;
@@ -944,6 +944,11 @@ impl eframe::App for SplitOfficeApp {
                         grid_state.scroll_y = tab_gs.scroll_y;
                         grid_state.scroll_x = tab_gs.scroll_x;
                         grid_state.selection = tab_gs.selection.clone();
+                    } else {
+                        // No saved state for this tab — start fresh.
+                        grid_state.scroll_y = 0.0;
+                        grid_state.scroll_x = 0.0;
+                        grid_state.selection = Selection::empty();
                     }
 
                     if let Some(h) = &handle {
