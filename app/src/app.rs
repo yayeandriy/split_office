@@ -938,12 +938,8 @@ impl eframe::App for SplitOfficeApp {
 
             let mut ctx = ViewContext {
                 render_spreadsheet: &mut |ui: &mut egui::Ui, leaf| {
-                    // ── Per-tab state swap ────────────────────────────────
+                    // ── Per-tab state: load this tab's scroll/selection ───
                     let vid = leaf.view_id;
-                    let saved_scroll_y = grid_state.scroll_y;
-                    let saved_scroll_x = grid_state.scroll_x;
-                    let saved_selection = grid_state.selection.clone();
-
                     if let Some(tab_gs) = tab_grid_states.get(&vid) {
                         grid_state.scroll_y = tab_gs.scroll_y;
                         grid_state.scroll_x = tab_gs.scroll_x;
@@ -988,11 +984,6 @@ impl eframe::App for SplitOfficeApp {
                         selection: grid_state.selection.clone(),
                         ..Default::default()
                     });
-
-                    // Restore active-tab state for query dispatch
-                    grid_state.scroll_y = saved_scroll_y;
-                    grid_state.scroll_x = saved_scroll_x;
-                    grid_state.selection = saved_selection;
                 },
                 render_document: &mut |ui: &mut egui::Ui, _leaf| {
                     document_view::render_document(ui, &document);
