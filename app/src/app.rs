@@ -9,7 +9,7 @@ use egui::Ui;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use core::{fmt_large, FilterExpr, Selection, Viewport};
+use core::{fmt_large, FilterExpr, Viewport};
 use grid::{GridAction, GridRenderer, GridState};
 use profiler::DatasetProfile;
 use query::stats::DatasetStats;
@@ -940,15 +940,11 @@ impl eframe::App for SplitOfficeApp {
                 render_spreadsheet: &mut |ui: &mut egui::Ui, leaf| {
                     // ── Per-tab state: load this tab's scroll/selection ───
                     let vid = leaf.view_id;
-                    if let Some(tab_gs) = tab_grid_states.get(&vid) {
+                    {
+                        let tab_gs = tab_grid_states.entry(vid).or_insert_with(GridState::new);
                         grid_state.scroll_y = tab_gs.scroll_y;
                         grid_state.scroll_x = tab_gs.scroll_x;
                         grid_state.selection = tab_gs.selection.clone();
-                    } else {
-                        // No saved state for this tab — start fresh.
-                        grid_state.scroll_y = 0.0;
-                        grid_state.scroll_x = 0.0;
-                        grid_state.selection = Selection::empty();
                     }
 
                     if let Some(h) = &handle {
@@ -983,12 +979,11 @@ impl eframe::App for SplitOfficeApp {
                     }
 
                     // ── Save per-tab state ──────────────────────────────
-                    tab_grid_states.insert(vid, GridState {
-                        scroll_y: grid_state.scroll_y,
-                        scroll_x: grid_state.scroll_x,
-                        selection: grid_state.selection.clone(),
-                        ..Default::default()
-                    });
+                    if let Some(tab_gs) = tab_grid_states.get_mut(&vid) {
+                        tab_gs.scroll_y = grid_state.scroll_y;
+                        tab_gs.scroll_x = grid_state.scroll_x;
+                        tab_gs.selection = grid_state.selection.clone();
+                    }
                 },
                 render_document: &mut |ui: &mut egui::Ui, _leaf| {
                     document_view::render_document(ui, &document);
