@@ -88,7 +88,7 @@ fn render_reference(ui: &mut egui::Ui, ref_block: &ReferenceBlock) {
         .inner_margin(egui::Margin::symmetric(8, 4))
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("📎").size(12.0));
+                ui.label(egui::RichText::new("›").size(14.0));
                 ui.label(
                     egui::RichText::new(&ref_block.label)
                         .size(12.0)

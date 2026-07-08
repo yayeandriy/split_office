@@ -27,6 +27,10 @@ use crate::workflow_sidebar;
 use cdm::{IdGenerator, ObjectId};
 use document_core::{Block, Document, HeadingBlock, ParagraphBlock, ReferenceBlock, Section, TableBlock};
 use workspace_core::{Workspace, WorkspaceObject};
+use split_view::{
+    LayoutManager, LayoutState,
+    renderer::{TabAction, ViewContext},
+};
 
 // ── Background messages ───────────────────────────────────────────────────────
 
@@ -49,10 +53,6 @@ enum BgMessage {
 struct UiPersist {
     /// Last successfully opened file path.
     last_file: Option<PathBuf>,
-    /// Panel widths in logical pixels.
-    schema_panel_width: f32,
-    workflow_panel_width: f32,
-    inspector_panel_width: f32,
     /// Whether each panel is visible.
     #[serde(default = "default_true")]
     show_schema_panel: bool,
@@ -66,15 +66,15 @@ struct UiPersist {
     /// Last inspected column name.
     #[serde(default)]
     inspected_col: Option<String>,
-    /// Document view visibility.
-    #[serde(default)]
-    show_document: bool,
     /// Object explorer visibility.
     #[serde(default = "default_true")]
     show_explorer: bool,
     /// UI theme: "dark" or "light".
     #[serde(default = "default_dark")]
     theme: String,
+    /// Serialised layout state for the split view framework.
+    #[serde(default)]
+    layout_json: Option<String>,
 }
 
 fn default_true() -> bool { true }
@@ -84,17 +84,14 @@ impl Default for UiPersist {
     fn default() -> Self {
         Self {
             last_file: None,
-            schema_panel_width: 220.0,
-            workflow_panel_width: 180.0,
-            inspector_panel_width: 230.0,
             show_schema_panel: true,
             show_workflow_panel: true,
             show_inspector_panel: true,
             perf_visible: false,
             inspected_col: None,
-            show_document: false,
             show_explorer: true,
             theme: "dark".into(),
+            layout_json: None,
         }
     }
 }
@@ -142,6 +139,9 @@ pub struct SplitOfficeApp {
     document: document_core::Document,
 
     workspace: Workspace,
+
+    // ── Split View Framework (spec §Split View Framework) ────────────────
+    layout_mgr: LayoutManager,
 }
 
 impl SplitOfficeApp {
@@ -154,6 +154,14 @@ impl SplitOfficeApp {
             .and_then(|storage| storage.get_string(STORAGE_KEY))
             .and_then(|json| serde_json::from_str::<UiPersist>(&json).ok())
             .unwrap_or_default();
+
+        // Restore or build the split-view layout.
+        let layout_mgr = persist
+            .layout_json
+            .as_deref()
+            .and_then(|json| LayoutState::from_json(json).ok())
+            .map(|s| s.restore())
+            .unwrap_or_else(LayoutManager::default_layout);
 
         // Bootstrap an empty workflow graph (no dataset yet).
         // It will be rebuilt when a dataset is loaded.
@@ -180,7 +188,7 @@ impl SplitOfficeApp {
             id_gen: IdGenerator::new(),
             document: Self::create_sample_document(),
             workspace: Workspace::new("My Workspace"),
-
+            layout_mgr,
         };
 
         // ── Apply persisted perf overlay visibility ─────────────────────
@@ -483,6 +491,32 @@ impl SplitOfficeApp {
         }
     }
 
+    // ── Tab action handling ──────────────────────────────────────────────────
+
+    fn handle_tab_actions(&mut self, actions: Vec<TabAction>) {
+        for action in actions {
+            match action {
+                TabAction::CloseTab { group_id, tab_index } => {
+                    if self.layout_mgr.close_tab_in_group(group_id, tab_index) {
+                        self.layout_mgr.focus.validate(&self.layout_mgr.root);
+                    }
+                }
+                TabAction::NewTab { group_id } => {
+                    self.layout_mgr.new_tab_in_group(group_id);
+                }
+                TabAction::NewTabWithType { group_id, view_type } => {
+                    self.layout_mgr.new_tab_with_type(group_id, view_type);
+                }
+                TabAction::SwitchType { group_id, tab_index, new_type } => {
+                    self.layout_mgr.switch_tab_type(group_id, tab_index, new_type);
+                }
+                TabAction::Reorder { group_id, from_index, to_index } => {
+                    self.layout_mgr.reorder_tabs(group_id, from_index, to_index);
+                }
+            }
+        }
+    }
+
     fn show_status_bar(&self, ui: &mut Ui) {
         ui.horizontal(|ui| {
             label::text(ui, &self.status_message);
@@ -621,6 +655,8 @@ impl eframe::App for SplitOfficeApp {
         // Sync runtime state back into the persisted struct before serializing.
         self.persist.perf_visible = self.perf.visible;
         self.persist.inspected_col = self.inspected_col.clone();
+        // Persist the split-view layout tree.
+        self.persist.layout_json = LayoutState::capture(&self.layout_mgr).to_json().ok();
         if let Ok(json) = serde_json::to_string(&self.persist) {
             _storage.set_string(STORAGE_KEY, json);
         }
@@ -660,6 +696,37 @@ impl eframe::App for SplitOfficeApp {
             .show(ui, |ui: &mut egui::Ui| {
                 ui.horizontal(|ui: &mut egui::Ui| {
                     ui.menu_button("View", |ui: &mut egui::Ui| {
+                        // ── Split View commands ────────────────────────────
+                        ui.label("Split View");
+                        if ui.button("⊟  Split Horizontal").clicked() {
+                            self.layout_mgr.split_horizontal("Sheet", None, 0.5);
+                            ui.close();
+                        }
+                        if ui.button("⊠  Split Vertical").clicked() {
+                            self.layout_mgr.split_vertical("Sheet", None, 0.5);
+                            ui.close();
+                        }
+                        if ui.button("⊞  Open Tab").clicked() {
+                            self.layout_mgr.open_tab("Sheet", None);
+                            ui.close();
+                        }
+                        if ui.button("✕  Close View").clicked() {
+                            if let Some(fid) = self.layout_mgr.focus.focused {
+                                self.layout_mgr.close_view(fid);
+                            }
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("⇥  Focus Next").clicked() {
+                            self.layout_mgr.focus_next();
+                            ui.close();
+                        }
+                        if ui.button("⇤  Focus Previous").clicked() {
+                            self.layout_mgr.focus_prev();
+                            ui.close();
+                        }
+                        ui.separator();
+                        // ── Side panels ────────────────────────────────────
                         ui.label("Panels");
                         if ui.selectable_label(self.persist.show_explorer, "Object Explorer").clicked() {
                             self.persist.show_explorer = !self.persist.show_explorer;
@@ -680,10 +747,6 @@ impl eframe::App for SplitOfficeApp {
                         ui.separator();
                         if ui.selectable_label(self.perf.visible, "Performance Overlay").clicked() {
                             self.perf.visible = !self.perf.visible;
-                            ui.close();
-                        }
-                        if ui.selectable_label(self.persist.show_document, "Document View").clicked() {
-                            self.persist.show_document = !self.persist.show_document;
                             ui.close();
                         }
                         ui.separator();
@@ -712,205 +775,218 @@ impl eframe::App for SplitOfficeApp {
                 self.show_status_bar(ui);
             });
 
-        // Object Explorer — always rendered.
-        if self.persist.show_explorer {
-            egui::Panel::left("explorer_panel")
-                .resizable(true)
-                .show(ui, |ui: &mut egui::Ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        crate::explorer::object_explorer(ui, &self.workspace);
-                    });
+        // ── Floating panels ─────────────────────────────────────────────────
+        //
+        // All panels are now floating windows (like the perf overlay),
+        // leaving the central area exclusively for the Doc | Spreadsheet split view.
+
+        let ctx = ui.ctx();
+
+        // Object Explorer
+        let mut show_explorer = self.persist.show_explorer;
+        egui::Window::new("🔍 Object Explorer")
+            .default_pos([20.0, 100.0])
+            .default_size([240.0, 350.0])
+            .resizable(true)
+            .open(&mut show_explorer)
+            .show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    crate::explorer::object_explorer(ui, &self.workspace);
                 });
-        }
+            });
+        self.persist.show_explorer = show_explorer;
 
-        // Left panel: schema — always rendered so eframe can persist its size.
-        let schema_resp = egui::Panel::left("schema_panel")
+        // Schema Panel
+        let mut show_schema = self.persist.show_schema_panel;
+        egui::Window::new("📋 Schema")
+            .default_pos([20.0, 470.0])
+            .default_size([260.0, 400.0])
             .resizable(true)
-            .show(ui, |ui: &mut egui::Ui| {
-                if self.persist.show_schema_panel {
-                    if let Some(handle) = &self.handle {
-                        panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
-                    } else {
-                        label::muted(ui, "No dataset loaded");
-                    }
+            .open(&mut show_schema)
+            .show(ctx, |ui| {
+                if let Some(handle) = &self.handle {
+                    panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
+                } else {
+                    label::muted(ui, "No dataset loaded");
                 }
             });
-        self.persist.schema_panel_width = schema_resp.response.rect.width();
+        self.persist.show_schema_panel = show_schema;
 
-        // Second left panel: workflow DAG sidebar — always rendered.
-        let wf_resp = egui::Panel::left("workflow_panel")
+        // Workflow Panel
+        let mut show_workflow = self.persist.show_workflow_panel;
+        egui::Window::new("⚙ Workflow")
+            .default_pos([20.0, 890.0])
+            .default_size([280.0, 350.0])
             .resizable(true)
-            .show(ui, |ui: &mut egui::Ui| {
-                if self.persist.show_workflow_panel {
-                    if self.handle.is_some() {
-                        // Collect column names for dropdown selects.
-                        let columns: Vec<String> = self.handle.as_ref()
-                            .map(|h| h.dataset.schema.column_names().iter().map(|s| s.to_string()).collect())
-                            .unwrap_or_default();
+            .open(&mut show_workflow)
+            .show(ctx, |ui| {
+                if self.handle.is_some() {
+                    let columns: Vec<String> = self.handle.as_ref()
+                        .map(|h| h.dataset.schema.column_names().iter().map(|s| s.to_string()).collect())
+                        .unwrap_or_default();
 
-                        let wf_actions = workflow_sidebar::workflow_panel(
-                            ui,
-                            &self.workflow,
-                            &columns,
-                            &mut self.expanded_modifiers,
-                        );
-
-                        // ── Process modifier stack actions ────────────────
-                        let has_actions = !wf_actions.is_empty();
-
-                        for node_id in &wf_actions.remove {
-                            let _ = self.workflow.remove_node(*node_id);
-                        }
-                        for node_id in &wf_actions.move_up {
-                            let idx = self.workflow.nodes().position(|n| n.id == *node_id);
-                            if let Some(i) = idx {
-                                let _ = self.workflow.move_modifier_up(i);
-                            }
-                        }
-                        for node_id in &wf_actions.move_down {
-                            let idx = self.workflow.nodes().position(|n| n.id == *node_id);
-                            if let Some(i) = idx {
-                                let _ = self.workflow.move_modifier_down(i);
-                            }
-                        }
-                        for node_id in &wf_actions.toggle {
-                            let _ = self.workflow.toggle_node(*node_id);
-                        }
-                        for node_id in &wf_actions.duplicate {
-                            if let Some(node) = self.workflow.node(*node_id) {
-                                let kind = node.kind;
-                                let payload = node.payload.clone();
-                                let idx = self.workflow.nodes().position(|n| n.id == *node_id);
-                                if let Some(i) = idx {
-                                    let _ = self.workflow.insert_node_at(i + 1, kind, payload);
-                                }
-                            }
-                        }
-                        // Settings changes from editable modifier cards.
-                        for (node_id, new_payload) in wf_actions.settings_changes {
-                            let _ = self.workflow.update_payload(node_id, new_payload);
-                        }
-                        if let Some(kind) = wf_actions.add_modifier {
-                            let payload = match kind {
-                                workflow::NodeKind::Filter => workflow::NodePayload::Filter {
-                                    expr: core::FilterExpr::None,
-                                },
-                                workflow::NodeKind::Sort => workflow::NodePayload::Sort {
-                                    specs: vec![],
-                                },
-                                workflow::NodeKind::Aggregate => workflow::NodePayload::Empty,
-                                workflow::NodeKind::DerivedColumn => workflow::NodePayload::Empty,
-                                _ => workflow::NodePayload::Empty,
-                            };
-                            let _ = self.workflow.add_node(kind, payload);
-                        }
-
-                        // Rebuild query if any actions occurred.
-                        if has_actions {
-                            self.fetch_page();
-                            self.refresh_count();
-                        }
-                    } else {
-                        label::muted(ui, "No workflow");
-                    }
-                }
-            });
-        self.persist.workflow_panel_width = wf_resp.response.rect.width();
-
-        // Right panel: column inspector — always rendered.
-        let insp_resp = egui::Panel::right("inspector_panel")
-            .resizable(true)
-            .show(ui, |ui: &mut egui::Ui| {
-                if self.persist.show_inspector_panel {
-                    let col_stats = self.inspected_col.as_ref().and_then(|name| {
-                        self.dataset_stats
-                            .as_ref()?
-                            .columns
-                            .iter()
-                            .find(|c| &c.name == name)
-                    });
-                    let col_profile = self.inspected_col.as_ref().and_then(|name| {
-                        self.profile.as_ref()?.column(name)
-                    });
-                    panels::column_inspector(ui, col_stats, col_profile);
-                }
-            });
-        self.persist.inspector_panel_width = insp_resp.response.rect.width();
-
-
-        // Central panel: grid.
-        egui::CentralPanel::default().show(ui, |ui: &mut egui::Ui| {
-            if let Some(handle) = &self.handle {
-                if let Some(batch) = self.current_batch.clone() {
-                    let h = ui.available_height();
-                    self.viewport.visible_rows = self.grid_state.rows_in_viewport(h);
-
-                    let actions = GridRenderer::show(
+                    let wf_actions = workflow_sidebar::workflow_panel(
                         ui,
-                        &handle.dataset,
-                        &batch,
-                        &mut self.grid_state,
-                        self.total_rows,
+                        &self.workflow,
+                        &columns,
+                        &mut self.expanded_modifiers,
                     );
-                    self.handle_grid_actions(actions);
-                } else if self.loading {
-                    ui.centered_and_justified(|ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.add_space(40.0);
-                            ui.spinner();
-                            ui.add_space(8.0);
-                            label::text(ui, "Loading dataset…");
-                        });
-                    });
-                }
-            } else {
-                // Drop-zone landing.
-                ui.centered_and_justified(|ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(60.0);
-                        label::text(ui, "Split Office");
-                        label::muted(ui, "Research Prototype");
-                        ui.add_space(20.0);
-                        label::text(ui, "▶  Drop a Parquet or CSV file here");
-                        label::muted(ui, "or click Open File above");
-                    });
-                });
-            }
-        });
 
-        // ── Document View (bottom panel) ─────────────────────────────────
-        if self.persist.show_document {
-            egui::Panel::bottom("document_panel")
-                .resizable(true)
-                .show(ui, |ui: &mut egui::Ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new("📄 Document").size(13.0).strong());
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui.small_button("×").on_hover_text("Close document view").clicked() {
-                                    self.persist.show_document = false;
-                                }
+                    let has_actions = !wf_actions.is_empty();
+
+                    for node_id in &wf_actions.remove {
+                        let _ = self.workflow.remove_node(*node_id);
+                    }
+                    for node_id in &wf_actions.move_up {
+                        let idx = self.workflow.nodes().position(|n| n.id == *node_id);
+                        if let Some(i) = idx {
+                            let _ = self.workflow.move_modifier_up(i);
+                        }
+                    }
+                    for node_id in &wf_actions.move_down {
+                        let idx = self.workflow.nodes().position(|n| n.id == *node_id);
+                        if let Some(i) = idx {
+                            let _ = self.workflow.move_modifier_down(i);
+                        }
+                    }
+                    for node_id in &wf_actions.toggle {
+                        let _ = self.workflow.toggle_node(*node_id);
+                    }
+                    for node_id in &wf_actions.duplicate {
+                        if let Some(node) = self.workflow.node(*node_id) {
+                            let kind = node.kind;
+                            let payload = node.payload.clone();
+                            let idx = self.workflow.nodes().position(|n| n.id == *node_id);
+                            if let Some(i) = idx {
+                                let _ = self.workflow.insert_node_at(i + 1, kind, payload);
+                            }
+                        }
+                    }
+                    for (node_id, new_payload) in wf_actions.settings_changes {
+                        let _ = self.workflow.update_payload(node_id, new_payload);
+                    }
+                    if let Some(kind) = wf_actions.add_modifier {
+                        let payload = match kind {
+                            workflow::NodeKind::Filter => workflow::NodePayload::Filter {
+                                expr: core::FilterExpr::None,
+                            },
+                            workflow::NodeKind::Sort => workflow::NodePayload::Sort {
+                                specs: vec![],
+                            },
+                            workflow::NodeKind::Aggregate => workflow::NodePayload::Empty,
+                            workflow::NodeKind::DerivedColumn => workflow::NodePayload::Empty,
+                            _ => workflow::NodePayload::Empty,
+                        };
+                        let _ = self.workflow.add_node(kind, payload);
+                    }
+
+                    if has_actions {
+                        self.fetch_page();
+                        self.refresh_count();
+                    }
+                } else {
+                    label::muted(ui, "No workflow");
+                }
+            });
+        self.persist.show_workflow_panel = show_workflow;
+
+        // Column Inspector
+        let mut show_inspector = self.persist.show_inspector_panel;
+        egui::Window::new("📊 Column Inspector")
+            .default_pos([1200.0, 100.0])
+            .default_size([260.0, 450.0])
+            .resizable(true)
+            .open(&mut show_inspector)
+            .show(ctx, |ui| {
+                let col_stats = self.inspected_col.as_ref().and_then(|name| {
+                    self.dataset_stats
+                        .as_ref()?
+                        .columns
+                        .iter()
+                        .find(|c| &c.name == name)
+                });
+                let col_profile = self.inspected_col.as_ref().and_then(|name| {
+                    self.profile.as_ref()?.column(name)
+                });
+                panels::column_inspector(ui, col_stats, col_profile);
+            });
+        self.persist.show_inspector_panel = show_inspector;
+
+
+        // ── Central panel: split-view framework ──────────────────────────
+        //
+        // The LayoutManager owns the layout tree.  We pass view-render
+        // callbacks via ViewContext so the renderer crate stays decoupled
+        // from app-level types.
+        egui::CentralPanel::default().show(ui, |ui: &mut egui::Ui| {
+            // Capture references needed inside closures.
+            let handle = self.handle.clone();
+            let current_batch = self.current_batch.clone();
+            let loading = self.loading;
+            let mut grid_state = self.grid_state.clone();
+            let total_rows = self.total_rows;
+            let document = self.document.clone();
+
+            let mut pending_grid_actions: Vec<GridAction> = Vec::new();
+            let mut new_visible_rows: Option<usize> = None;
+
+            let mut ctx = ViewContext {
+                render_spreadsheet: &mut |ui: &mut egui::Ui, _leaf| {
+                    if let Some(h) = &handle {
+                        if let Some(batch) = current_batch.clone() {
+                            let height = ui.available_height();
+                            new_visible_rows = Some(grid_state.rows_in_viewport(height));
+                            let actions = GridRenderer::show(
+                                ui, &h.dataset, &batch, &mut grid_state, total_rows,
+                            );
+                            pending_grid_actions.extend(actions);
+                        } else if loading {
+                            ui.centered_and_justified(|ui| {
+                                ui.vertical_centered(|ui| {
+                                    ui.add_space(40.0);
+                                    ui.spinner();
+                                    ui.add_space(8.0);
+                                    label::text(ui, "Loading dataset…");
+                                });
+                            });
+                        }
+                    } else {
+                        ui.centered_and_justified(|ui| {
+                            ui.vertical_centered(|ui| {
+                                ui.add_space(60.0);
+                                label::text(ui, "Split Office");
+                                label::muted(ui, "Research Prototype");
+                                ui.add_space(20.0);
+                                label::text(ui, "▶  Drop a Parquet or CSV file here");
+                                label::muted(ui, "or click Open File above");
                             });
                         });
-                    });
-                    ui.separator();
-                    document_view::render_document(ui, &self.document);
-                });
-        }
+                    }
+                },
+                render_document: &mut |ui: &mut egui::Ui, _leaf| {
+                    document_view::render_document(ui, &document);
+                },
+            };
+
+            let mut tab_actions: Vec<TabAction> = Vec::new();
+            split_view::render_layout(ui, &mut self.layout_mgr, &mut ctx, &mut tab_actions);
+
+            // Apply grid actions collected from inside the closure.
+            if let Some(vr) = new_visible_rows {
+                self.viewport.visible_rows = vr;
+            }
+            self.grid_state = grid_state;
+            self.handle_grid_actions(pending_grid_actions);
+
+            // Apply tab actions.
+            self.handle_tab_actions(tab_actions);
+        });
 
         // Performance overlay (always on top).
         self.perf.show(ui.ctx());
 
-        // ── Persist panel widths into egui Memory (auto-restored by eframe) ──
-        let ctx = ui.ctx();
-        ctx.data_mut(|d| {
-            d.insert_persisted(egui::Id::new("panel_schema_width"), self.persist.schema_panel_width);
-            d.insert_persisted(egui::Id::new("panel_workflow_width"), self.persist.workflow_panel_width);
-            d.insert_persisted(egui::Id::new("panel_inspector_width"), self.persist.inspector_panel_width);
-        });
-
         // Drive continuous repainting for 60 FPS.
-        ctx.request_repaint();
+        ui.ctx().request_repaint();
     }
 }
 

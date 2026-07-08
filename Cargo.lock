@@ -148,6 +148,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "split_view",
  "storage",
  "tracing",
  "tracing-subscriber",
@@ -5143,6 +5144,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9571ea910ebd84c86af4b3ed27f9dbdc6ad06f17c5f96146b2b671e2976744f"
 dependencies = [
  "bitflags 2.13.0",
+]
+
+[[package]]
+name = "split_view"
+version = "0.31.0"
+dependencies = [
+ "cdm",
+ "egui",
+ "serde",
+ "serde_json",
+ "workspace_core",
 ]
 
 [[package]]

@@ -18,6 +18,7 @@ document_core = { path = "../document_core" }
 document_view = { path = "../document_view" }
 cdm = { path = "../cdm" }
 workspace_core = { path = "../workspace_core" }
+split_view     = { path = "../split_view" }
 eframe.workspace = true
 egui.workspace = true
 arrow.workspace = true

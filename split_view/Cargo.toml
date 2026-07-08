@@ -1,0 +1,11 @@
+[package]
+name = "split_view"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cdm            = { path = "../cdm" }
+workspace_core = { path = "../workspace_core" }
+egui.workspace = true
+serde.workspace = true
+serde_json.workspace = true
