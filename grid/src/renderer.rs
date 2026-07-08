@@ -125,6 +125,7 @@ impl GridRenderer {
         batch: &RecordBatch,
         state: &mut GridState,
         total_rows: usize,
+        view_id: u64,
     ) -> Vec<GridAction> {
         let dark = ui.visuals().dark_mode;
         let mut actions = Vec::new();
@@ -212,6 +213,7 @@ impl GridRenderer {
             state.scroll_y = new_first as f32 * GridState::ROW_HEIGHT;
             actions.push(GridAction::ScrollChanged {
                 first_row: new_first,
+                view_id,
             });
         }
 
@@ -246,6 +248,7 @@ impl GridRenderer {
                 if new_first != old_first {
                     actions.push(GridAction::ScrollChanged {
                         first_row: new_first,
+                        view_id,
                     });
                 }
                 ui.ctx().input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
@@ -267,20 +270,20 @@ impl GridRenderer {
                 state.scroll_y = (state.scroll_y + GridState::ROW_HEIGHT).min(
                     (total_rows as f32 - 1.0) * GridState::ROW_HEIGHT,
                 );
-                actions.push(GridAction::ScrollChanged { first_row: state.first_row() });
+                actions.push(GridAction::ScrollChanged { first_row: state.first_row(), view_id });
             }
             if pressed_up {
                 state.scroll_y = (state.scroll_y - GridState::ROW_HEIGHT).max(0.0);
-                actions.push(GridAction::ScrollChanged { first_row: state.first_row() });
+                actions.push(GridAction::ScrollChanged { first_row: state.first_row(), view_id });
             }
             if pressed_pgdn {
                 state.scroll_y = (state.scroll_y + viewport_height)
                     .min((total_rows as f32 - 1.0) * GridState::ROW_HEIGHT);
-                actions.push(GridAction::ScrollChanged { first_row: state.first_row() });
+                actions.push(GridAction::ScrollChanged { first_row: state.first_row(), view_id });
             }
             if pressed_pgup {
                 state.scroll_y = (state.scroll_y - viewport_height).max(0.0);
-                actions.push(GridAction::ScrollChanged { first_row: state.first_row() });
+                actions.push(GridAction::ScrollChanged { first_row: state.first_row(), view_id });
             }
         }
 

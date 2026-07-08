@@ -142,7 +142,8 @@ pub enum GridAction {
     /// User clicked to clear all sorts.
     SortCleared,
     /// User scrolled — update viewport and re-query if needed.
-    ScrollChanged { first_row: usize },
+    /// `view_id` identifies which tab emitted the scroll (0 if unknown).
+    ScrollChanged { first_row: usize, view_id: u64 },
     /// User typed in a column filter input — re-query.
     FilterColumnChanged { column: String, text: String },
     /// User selected rows.

@@ -123,6 +123,10 @@ pub struct SplitOfficeApp {
     /// Per-tab grid state: each spreadsheet tab remembers its own scroll
     /// position and selection independently (only underlying data is shared).
     tab_grid_states: HashMap<ViewId, GridState>,
+    /// Per-tab viewport: each tab fetches its own data window.
+    tab_viewports: HashMap<ViewId, Viewport>,
+    /// Per-tab data batch: each tab renders from its own fetched rows.
+    tab_batches: HashMap<ViewId, RecordBatch>,
 
     inspected_col: Option<String>,
 
@@ -182,6 +186,8 @@ impl SplitOfficeApp {
             total_rows: 0,
             grid_state: GridState::new(),
             tab_grid_states: HashMap::new(),
+            tab_viewports: HashMap::new(),
+            tab_batches: HashMap::new(),
             current_batch: None,
             inspected_col: persist.inspected_col.clone(),
             perf: PerfOverlay::new(),
@@ -483,14 +489,30 @@ impl SplitOfficeApp {
                     self.grid_state.scroll_y = 0.0;
                     self.fetch_page();
                 }
-                GridAction::ScrollChanged { first_row } => {
+                GridAction::ScrollChanged { first_row, view_id } => {
                     debug!(
                         first_row,
+                        view_id,
                         viewport_before = ?self.viewport,
                         total_rows = self.total_rows,
                         "ScrollChanged action"
                     );
-                    self.viewport.first_row = first_row;
+                    // Store per-tab viewport.
+                    let vid = ViewId(view_id);
+                    let vp = self.tab_viewports.entry(vid).or_insert(Viewport::default());
+                    vp.first_row = first_row;
+                    vp.visible_rows = self.viewport.visible_rows;
+                    *vp = vp.clamped(self.total_rows);
+
+                    // Compute union viewport covering all active tabs.
+                    let mut min_row = first_row;
+                    let mut max_row = first_row + vp.visible_rows;
+                    for v in self.tab_viewports.values() {
+                        min_row = min_row.min(v.first_row);
+                        max_row = max_row.max(v.first_row + v.visible_rows);
+                    }
+                    self.viewport.first_row = min_row;
+                    self.viewport.visible_rows = (max_row - min_row).max(50);
                     self.viewport = self.viewport.clamped(self.total_rows);
                     self.fetch_page();
                 }
@@ -963,6 +985,7 @@ impl eframe::App for SplitOfficeApp {
                             new_visible_rows = Some(tab_gs.rows_in_viewport(height));
                             let actions = GridRenderer::show(
                                 ui, &h.dataset, &batch, &mut tab_gs, total_rows,
+                                vid.0,
                             );
                             pending_grid_actions.extend(actions);
                         } else if loading {
