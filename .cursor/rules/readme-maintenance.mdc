@@ -1,0 +1,33 @@
+---
+description: Keep README.md accurate whenever the codebase changes
+alwaysApply: true
+---
+
+# README Maintenance
+
+`README.md` is the canonical project overview. Update it **in the same commit** as the code change whenever any of the following happen:
+
+## When to update
+
+| Change | Section to update |
+|---|---|
+| New crate added to `crates/` | Project Structure table + Dependency Graph |
+| Crate removed or renamed | Project Structure table + Dependency Graph |
+| New view type added to `split_view` | Key Concepts → Split-Pane Layout |
+| New top-level directory added | Project Structure tree |
+| Tech stack dependency added/removed | Tech Stack table |
+| Major feature lands (new UI panel, new engine, new CDM block, …) | Key Concepts or Roadmap |
+| Phase milestone completed | Roadmap table (✅ / 🔜) |
+| Build or run instructions change | Build & Run section |
+| New dev convention established | Development → Conventions |
+
+## What NOT to change
+
+- Don't rewrite the Vision or Architecture Principles sections without explicit instruction — those reflect intentional product decisions.
+- Don't add implementation details that belong in `docs/` or inline code comments.
+
+## Format rules
+
+- Keep the README scannable: tables over prose wherever possible.
+- Crate descriptions in the Project Structure table: one line, present-tense verb phrase (e.g. "Virtualized spreadsheet grid renderer").
+- Dependency graph uses ASCII art arrows — keep it updated but don't over-engineer it.
