@@ -129,7 +129,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "app"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -679,7 +679,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "benchmark"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "core",
  "criterion",
@@ -936,7 +936,7 @@ dependencies = [
 
 [[package]]
 name = "cdm"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "serde",
 ]
@@ -1122,7 +1122,7 @@ dependencies = [
 
 [[package]]
 name = "core"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "arrow",
  "serde",
@@ -1389,7 +1389,7 @@ dependencies = [
 
 [[package]]
 name = "document_core"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "cdm",
  "serde",
@@ -1397,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "document_view"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "cdm",
  "document_core",
@@ -1708,7 +1708,7 @@ dependencies = [
 
 [[package]]
 name = "expression"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "core",
  "serde",
@@ -2109,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "grid"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "arrow",
  "core",
@@ -2772,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "lineage"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "core",
  "serde",
@@ -4191,7 +4191,7 @@ dependencies = [
 
 [[package]]
 name = "profiler"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -4211,7 +4211,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "project"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "core",
  "serde",
@@ -4259,7 +4259,7 @@ checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
 name = "query"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -5148,7 +5148,7 @@ dependencies = [
 
 [[package]]
 name = "split_view"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "cdm",
  "egui",
@@ -5193,7 +5193,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -5643,7 +5643,7 @@ dependencies = [
 
 [[package]]
 name = "transform"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "core",
  "expression",
@@ -6683,7 +6683,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "workflow"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "core",
  "serde",
@@ -6691,7 +6691,7 @@ dependencies = [
 
 [[package]]
 name = "workspace_core"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "cdm",
  "serde",

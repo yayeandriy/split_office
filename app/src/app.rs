@@ -950,8 +950,15 @@ impl eframe::App for SplitOfficeApp {
             let current_batch = self.current_batch.clone();
             let loading = self.loading;
             let total_rows = self.total_rows;
+            let batch_start_row = self.viewport.first_row;
             let document = self.document.clone();
             let tab_grid_states = &mut self.tab_grid_states;
+            // Borrow separately so we can update every active tab's viewport
+            // each frame — not only on ScrollChanged. This ensures the union
+            // viewport in handle_grid_actions always covers all split panes,
+            // preventing the batch from being shifted away from tabs that
+            // haven't scrolled yet.
+            let tab_viewports = &mut self.tab_viewports;
 
             let mut pending_grid_actions: Vec<GridAction> = Vec::new();
             let mut new_visible_rows: Option<usize> = None;
@@ -968,11 +975,19 @@ impl eframe::App for SplitOfficeApp {
                     if let Some(h) = &handle {
                         if let Some(batch) = current_batch.clone() {
                             let height = ui.available_height();
-                            new_visible_rows = Some(tab_gs.rows_in_viewport(height));
-                            let screen_rect = ui.clip_rect();
+                            let vis = tab_gs.rows_in_viewport(height);
+                            new_visible_rows = Some(vis);
+
+                            // Keep this tab's viewport registered so the union
+                            // viewport in handle_grid_actions covers every active
+                            // pane, even ones that have never emitted ScrollChanged.
+                            let vp = tab_viewports.entry(vid).or_insert_with(Viewport::default);
+                            vp.first_row = tab_gs.first_row();
+                            vp.visible_rows = vis;
+
                             let actions = GridRenderer::show(
                                 ui, &h.dataset, &batch, &mut tab_gs, total_rows,
-                                vid.0, screen_rect,
+                                vid.0, batch_start_row,
                             );
                             pending_grid_actions.extend(actions);
                         } else if loading {

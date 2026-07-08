@@ -126,7 +126,7 @@ impl GridRenderer {
         state: &mut GridState,
         total_rows: usize,
         view_id: u64,
-        screen_rect: Rect,
+        batch_start_row: usize,
     ) -> Vec<GridAction> {
         let dark = ui.visuals().dark_mode;
         let mut actions = Vec::new();
@@ -196,6 +196,7 @@ impl GridRenderer {
             grid_rect,
             first_row,
             visible_rows,
+            batch_start_row,
             &grid_response,
             &mut actions,
         );
@@ -233,7 +234,7 @@ impl GridRenderer {
 
         // ── 12. Mouse wheel scroll ─────────────────────────────────────────
         let mouse_in_grid = ui.ctx().pointer_interact_pos()
-            .map_or(false, |p| screen_rect.contains(p));
+            .map_or(false, |p| available.contains(p));
         if mouse_in_grid {
             let scroll_delta = ui.input(|i| i.smooth_scroll_delta);
             if scroll_delta.y.abs() > 0.01 {
@@ -594,6 +595,7 @@ impl GridRenderer {
         grid_rect: Rect,
         first_row: usize,
         visible_rows: usize,
+        batch_start_row: usize,
         grid_response: &Response,
         actions: &mut Vec<GridAction>,
     ) {
@@ -604,6 +606,9 @@ impl GridRenderer {
             Pos2::new(grid_rect.left(), grid_rect.top() + total_header_h),
             Vec2::new(grid_rect.width(), grid_rect.height() - total_header_h),
         );
+        // Offset into the shared batch: the batch starts at `batch_start_row` in
+        // global row space, but this tab's first visible row is `first_row`.
+        let batch_offset = first_row.saturating_sub(batch_start_row);
 
         // Hover detection.
         let hover_row: Option<usize> = grid_response.hover_pos().and_then(|pos| {
@@ -687,8 +692,9 @@ impl GridRenderer {
                 }
 
                 // Cell value from Arrow batch.
-                let text = if local_row < batch.num_rows() {
-                    format_cell(batch, col_idx, local_row)
+                let batch_idx = batch_offset + local_row;
+                let text = if batch_idx < batch.num_rows() {
+                    format_cell(batch, col_idx, batch_idx)
                 } else {
                     String::new()
                 };
