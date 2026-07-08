@@ -928,7 +928,6 @@ impl eframe::App for SplitOfficeApp {
             let handle = self.handle.clone();
             let current_batch = self.current_batch.clone();
             let loading = self.loading;
-            let mut grid_state = self.grid_state.clone();
             let total_rows = self.total_rows;
             let document = self.document.clone();
             let tab_grid_states = &mut self.tab_grid_states;
@@ -938,21 +937,19 @@ impl eframe::App for SplitOfficeApp {
 
             let mut ctx = ViewContext {
                 render_spreadsheet: &mut |ui: &mut egui::Ui, leaf| {
-                    // ── Per-tab state: load this tab's scroll/selection ───
+                    // ── Per-tab grid state (fully isolated, no global clone) ──
                     let vid = leaf.view_id;
-                    {
-                        let tab_gs = tab_grid_states.entry(vid).or_insert_with(GridState::new);
-                        grid_state.scroll_y = tab_gs.scroll_y;
-                        grid_state.scroll_x = tab_gs.scroll_x;
-                        grid_state.selection = tab_gs.selection.clone();
-                    }
+                    let mut tab_gs = tab_grid_states
+                        .entry(vid)
+                        .or_insert_with(GridState::new)
+                        .clone();
 
                     if let Some(h) = &handle {
                         if let Some(batch) = current_batch.clone() {
                             let height = ui.available_height();
-                            new_visible_rows = Some(grid_state.rows_in_viewport(height));
+                            new_visible_rows = Some(tab_gs.rows_in_viewport(height));
                             let actions = GridRenderer::show(
-                                ui, &h.dataset, &batch, &mut grid_state, total_rows,
+                                ui, &h.dataset, &batch, &mut tab_gs, total_rows,
                             );
                             pending_grid_actions.extend(actions);
                         } else if loading {
@@ -979,10 +976,8 @@ impl eframe::App for SplitOfficeApp {
                     }
 
                     // ── Save per-tab state ──────────────────────────────
-                    if let Some(tab_gs) = tab_grid_states.get_mut(&vid) {
-                        tab_gs.scroll_y = grid_state.scroll_y;
-                        tab_gs.scroll_x = grid_state.scroll_x;
-                        tab_gs.selection = grid_state.selection.clone();
+                    if let Some(stored) = tab_grid_states.get_mut(&vid) {
+                        *stored = tab_gs;
                     }
                 },
                 render_document: &mut |ui: &mut egui::Ui, _leaf| {
@@ -997,7 +992,6 @@ impl eframe::App for SplitOfficeApp {
             if let Some(vr) = new_visible_rows {
                 self.viewport.visible_rows = vr;
             }
-            self.grid_state = grid_state;
             self.handle_grid_actions(pending_grid_actions);
 
             // Apply tab actions.
