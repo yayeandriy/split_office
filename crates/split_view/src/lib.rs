@@ -26,4 +26,4 @@ pub use layout::{LayoutNode, LeafView, SplitNode, TabContainer, ViewId};
 pub use manager::{default_tab_name, LayoutManager};
 pub use persistence::LayoutState;
 pub use registry::{ViewRegistry, ViewType};
-pub use renderer::{render_layout, TabAction, ViewContext};
+pub use renderer::{render_layout, tab_button, TabAction, ViewContext, BAR_PADDING};

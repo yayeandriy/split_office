@@ -53,22 +53,21 @@ enum BgMessage {
 struct UiPersist {
     /// Last successfully opened file path.
     last_file: Option<PathBuf>,
-    /// Whether each panel is visible.
+    /// Left sidebar (Navigator) visibility.
     #[serde(default = "default_true")]
-    show_schema_panel: bool,
+    show_left_panel: bool,
+    /// Right sidebar (Inspector) visibility.
     #[serde(default = "default_true")]
-    show_workflow_panel: bool,
-    #[serde(default = "default_true")]
-    show_inspector_panel: bool,
+    show_right_panel: bool,
+    /// Active navigator tab: 0 = Explorer, 1 = Schema, 2 = Workflow.
+    #[serde(default)]
+    left_nav_tab: u8,
     /// Performance overlay visibility.
     #[serde(default)]
     perf_visible: bool,
     /// Last inspected column name.
     #[serde(default)]
     inspected_col: Option<String>,
-    /// Object explorer visibility.
-    #[serde(default = "default_true")]
-    show_explorer: bool,
     /// UI theme: "dark" or "light".
     #[serde(default = "default_dark")]
     theme: String,
@@ -84,12 +83,11 @@ impl Default for UiPersist {
     fn default() -> Self {
         Self {
             last_file: None,
-            show_schema_panel: true,
-            show_workflow_panel: true,
-            show_inspector_panel: true,
+            show_left_panel: true,
+            show_right_panel: true,
+            left_nav_tab: 0,
             perf_visible: false,
             inspected_col: None,
-            show_explorer: true,
             theme: "dark".into(),
             layout_json: None,
         }
@@ -610,67 +608,6 @@ impl SplitOfficeApp {
         self.fetch_page();
     }
 
-    fn show_toolbar(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
-            if ui.button("▶  Open File").clicked() {
-                if let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Data Files", &["parquet", "csv"])
-                    .pick_file()
-                {
-                    self.open_file(path);
-                }
-            }
-
-            ui.separator();
-
-            if !self.grid_state.sort_specs.is_empty() {
-                if ui.button("↻  Clear Sorts").clicked() {
-                    self.grid_state.clear_sorts();
-                    // Clear the Sort node in the workflow graph.
-                    if let Some(ids) = &self.workflow_ids {
-                        let sort_id = ids.sort;
-                        let _ = self.workflow.update_payload(
-                            sort_id,
-                            NodePayload::Sort { specs: vec![] },
-                        );
-                    }
-                    self.viewport.first_row = 0;
-                    self.grid_state.scroll_y = 0.0;
-                    self.fetch_page();
-                }
-                ui.separator();
-            }
-
-            if self.grid_state.has_active_filters() {
-                if ui.button("×  Clear Filters").clicked() {
-                    self.grid_state.column_filters.clear();
-                    // Clear the Filter node in the workflow graph.
-                    if let Some(ids) = &self.workflow_ids {
-                        let filter_id = ids.filter;
-                        let _ = self.workflow.update_payload(
-                            filter_id,
-                            NodePayload::Filter { expr: FilterExpr::None },
-                        );
-                    }
-                    self.apply_filter();
-                }
-                ui.separator();
-            }
-
-            if let Some(h) = &self.handle {
-                label::text(ui, format!(
-                    "{} · {} rows · {} cols",
-                    h.dataset.name,
-                    fmt_large(h.dataset.row_count),
-                    h.dataset.schema.column_count()
-                ));
-            }
-
-            if self.loading {
-                ui.spinner();
-            }
-        });
-    }
 }
 
 
@@ -717,324 +654,423 @@ impl eframe::App for SplitOfficeApp {
             }
         });
 
-        // Menu bar.
-        egui::Panel::top("menu_bar")
-            .show(ui, |ui: &mut egui::Ui| {
-                ui.horizontal(|ui: &mut egui::Ui| {
-                    ui.menu_button("View", |ui: &mut egui::Ui| {
-                        // ── Split View commands ────────────────────────────
-                        ui.label("Split View");
-                        if ui.button("⊟  Split Horizontal").clicked() {
-                            self.layout_mgr.split_horizontal("Sheet", None, 0.5);
-                            ui.close();
-                        }
-                        if ui.button("⊠  Split Vertical").clicked() {
-                            self.layout_mgr.split_vertical("Sheet", None, 0.5);
-                            ui.close();
-                        }
-                        if ui.button("⊞  Open Tab").clicked() {
-                            self.layout_mgr.open_tab("Sheet", None);
-                            ui.close();
-                        }
-                        if ui.button("✕  Close View").clicked() {
-                            if let Some(fid) = self.layout_mgr.focus.focused {
-                                self.layout_mgr.close_view(fid);
-                            }
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button("⇥  Focus Next").clicked() {
-                            self.layout_mgr.focus_next();
-                            ui.close();
-                        }
-                        if ui.button("⇤  Focus Previous").clicked() {
-                            self.layout_mgr.focus_prev();
-                            ui.close();
-                        }
-                        ui.separator();
-                        // ── Side panels ────────────────────────────────────
-                        ui.label("Panels");
-                        if ui.selectable_label(self.persist.show_explorer, "Object Explorer").clicked() {
-                            self.persist.show_explorer = !self.persist.show_explorer;
-                            ui.close();
-                        }
-                        if ui.selectable_label(self.persist.show_schema_panel, "Schema Panel").clicked() {
-                            self.persist.show_schema_panel = !self.persist.show_schema_panel;
-                            ui.close();
-                        }
-                        if ui.selectable_label(self.persist.show_workflow_panel, "Workflow Panel").clicked() {
-                            self.persist.show_workflow_panel = !self.persist.show_workflow_panel;
-                            ui.close();
-                        }
-                        if ui.selectable_label(self.persist.show_inspector_panel, "Column Inspector").clicked() {
-                            self.persist.show_inspector_panel = !self.persist.show_inspector_panel;
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.selectable_label(self.perf.visible, "Performance Overlay").clicked() {
-                            self.perf.visible = !self.perf.visible;
-                            ui.close();
-                        }
-                        ui.separator();
-                        let is_dark = self.persist.theme == "dark";
-                        if ui.selectable_label(is_dark, "Dark Theme").clicked() {
-                            self.persist.theme = "dark".into();
-                            ui.close();
-                        }
-                        if ui.selectable_label(!is_dark, "Light Theme").clicked() {
-                            self.persist.theme = "light".into();
-                            ui.close();
-                        }
-                    });
-                });
-            });
-
-        // Top toolbar.
-        egui::Panel::top("toolbar")
-            .show(ui, |ui: &mut egui::Ui| {
-                self.show_toolbar(ui);
-            });
-
-        // Status bar.
+        // Status bar — only remaining panel row.
+        // Toolbar + View menu are now injected directly into the tab bar (single header row).
         egui::Panel::bottom("status")
+            .show_separator_line(false)
             .show(ui, |ui: &mut egui::Ui| {
                 self.show_status_bar(ui);
             });
 
-        // ── Floating panels ─────────────────────────────────────────────────
+        // ── Compact header row ────────────────────────────────────────────────
         //
-        // All panels are now floating windows (like the perf overlay),
-        // leaving the central area exclusively for the Doc | Spreadsheet split view.
+        // Single row: ◧ navigator | ≡ unified-menu (opens dropdown) | [↻ Sorts] [× Filters] | ◨ inspector
+        // Dataset info is NOT shown here — the tab bar and status bar provide enough context.
+        {
+            let dark          = self.persist.theme == "dark";
+            let bg_fill       = if dark { egui::Color32::from_rgb(28, 28, 30) } else { egui::Color32::WHITE };
+            let accent        = if dark { egui::Color32::from_rgb(10, 132, 255) } else { egui::Color32::from_rgb(0, 122, 255) };
+            let icon_col      = if dark { egui::Color32::from_rgb(142, 142, 147) } else { egui::Color32::from_rgb(110, 110, 118) };
+            let chip_bg       = if dark { egui::Color32::from_rgb(44, 44, 48) } else { egui::Color32::from_rgb(228, 228, 234) };
+            let chip_bg_hover = if dark { egui::Color32::from_rgb(58, 58, 62) } else { egui::Color32::from_rgb(210, 210, 218) };
+            let has_sorts   = !self.grid_state.sort_specs.is_empty();
+            let has_filters = self.grid_state.has_active_filters();
 
-        let ctx = ui.ctx();
+            egui::Panel::top("toolbar")
+                .show_separator_line(false)
+                // vertical padding gives the toolbar a comfortable breathing room
+                .frame(egui::Frame::new().fill(bg_fill).inner_margin(egui::Margin::same(split_view::BAR_PADDING as i8)))
+                .show(ui, |ui: &mut egui::Ui| {
+                    ui.horizontal(|ui| {
+                        ui.add_space(8.0);
 
-        // Object Explorer
-        let mut show_explorer = self.persist.show_explorer;
-        egui::Window::new("🔍 Object Explorer")
-            .default_pos([20.0, 100.0])
-            .default_size([240.0, 350.0])
-            .resizable(true)
-            .open(&mut show_explorer)
-            .show(ctx, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    crate::explorer::object_explorer(ui, &self.workspace);
-                });
-            });
-        self.persist.show_explorer = show_explorer;
-
-        // Schema Panel
-        let mut show_schema = self.persist.show_schema_panel;
-        egui::Window::new("📋 Schema")
-            .default_pos([20.0, 470.0])
-            .default_size([260.0, 400.0])
-            .resizable(true)
-            .open(&mut show_schema)
-            .show(ctx, |ui| {
-                if let Some(handle) = &self.handle {
-                    panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
-                } else {
-                    label::muted(ui, "No dataset loaded");
-                }
-            });
-        self.persist.show_schema_panel = show_schema;
-
-        // Workflow Panel
-        let mut show_workflow = self.persist.show_workflow_panel;
-        egui::Window::new("⚙ Workflow")
-            .default_pos([20.0, 890.0])
-            .default_size([280.0, 350.0])
-            .resizable(true)
-            .open(&mut show_workflow)
-            .show(ctx, |ui| {
-                if self.handle.is_some() {
-                    let columns: Vec<String> = self.handle.as_ref()
-                        .map(|h| h.dataset.schema.column_names().iter().map(|s| s.to_string()).collect())
-                        .unwrap_or_default();
-
-                    let wf_actions = workflow_sidebar::workflow_panel(
-                        ui,
-                        &self.workflow,
-                        &columns,
-                        &mut self.expanded_modifiers,
-                    );
-
-                    let has_actions = !wf_actions.is_empty();
-
-                    for node_id in &wf_actions.remove {
-                        let _ = self.workflow.remove_node(*node_id);
-                    }
-                    for node_id in &wf_actions.move_up {
-                        let idx = self.workflow.nodes().position(|n| n.id == *node_id);
-                        if let Some(i) = idx {
-                            let _ = self.workflow.move_modifier_up(i);
+                        // ◧ Navigator sidebar toggle
+                        if ui.add(
+                            egui::Button::new(egui::RichText::new("◧").size(14.0).color(
+                                if self.persist.show_left_panel { accent } else { icon_col }
+                            ))
+                            .fill(egui::Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::NONE)
+                            .min_size(egui::Vec2::new(28.0, 24.0)),
+                        ).clicked() {
+                            self.persist.show_left_panel = !self.persist.show_left_panel;
                         }
-                    }
-                    for node_id in &wf_actions.move_down {
-                        let idx = self.workflow.nodes().position(|n| n.id == *node_id);
-                        if let Some(i) = idx {
-                            let _ = self.workflow.move_modifier_down(i);
+
+                        // ≡ Unified menu — true circle using painter + egui::Popup::menu.
+                        // menu_button sizes itself from text metrics → always non-square.
+                        // allocate_exact_size forces a 28×28 square, we paint a circle, and
+                        // egui::Popup::menu handles toggle + positioning automatically.
+                        {
+                            let menu_id  = egui::Id::new("main_menu");
+                            let is_open  = egui::Popup::is_id_open(ui.ctx(), menu_id);
+
+                            let btn_size = egui::Vec2::splat(28.0);
+                            let (btn_rect, btn_resp) = ui.allocate_exact_size(btn_size, egui::Sense::click());
+
+                            let circle_fill = if btn_resp.hovered() || btn_resp.is_pointer_button_down_on() || is_open {
+                                chip_bg_hover
+                            } else {
+                                chip_bg
+                            };
+                            ui.painter().circle_filled(btn_rect.center(), btn_rect.height() / 2.0, circle_fill);
+                            crate::label::paint_icon_centered(
+                                ui, btn_rect, "≡",
+                                egui::FontId::proportional(15.0),
+                                icon_col,
+                            );
+
+                            // Popup::menu toggles open/close on click automatically.
+                            egui::Popup::menu(&btn_resp)
+                                .id(menu_id)
+                                .show(|ui| {
+                                    ui.set_min_width(160.0);
+                                    let close = |ui: &mut egui::Ui| egui::Popup::close_id(ui.ctx(), menu_id);
+
+                                    if ui.button("Open File…").clicked() {
+                                        if let Some(path) = rfd::FileDialog::new()
+                                            .add_filter("Data Files", &["parquet", "csv"])
+                                            .pick_file()
+                                        {
+                                            self.open_file(path);
+                                        }
+                                        close(ui);
+                                    }
+                                    ui.separator();
+                                    ui.label("Split View");
+                                    if ui.button("⊟  Horizontal").clicked() { self.layout_mgr.split_horizontal("Sheet", None, 0.5); close(ui); }
+                                    if ui.button("⊠  Vertical").clicked()   { self.layout_mgr.split_vertical("Sheet", None, 0.5);   close(ui); }
+                                    if ui.button("⊞  New Tab").clicked()     { self.layout_mgr.open_tab("Sheet", None);              close(ui); }
+                                    if ui.button("✕  Close View").clicked() {
+                                        if let Some(fid) = self.layout_mgr.focus.focused { self.layout_mgr.close_view(fid); }
+                                        close(ui);
+                                    }
+                                    ui.separator();
+                                    if ui.button("⇥  Next").clicked() { self.layout_mgr.focus_next(); close(ui); }
+                                    if ui.button("⇤  Prev").clicked() { self.layout_mgr.focus_prev(); close(ui); }
+                                    ui.separator();
+                                    ui.label("Sidebars");
+                                    if ui.selectable_label(self.persist.show_left_panel,  "Navigator").clicked() { self.persist.show_left_panel  = !self.persist.show_left_panel;  close(ui); }
+                                    if ui.selectable_label(self.persist.show_right_panel, "Inspector").clicked() { self.persist.show_right_panel = !self.persist.show_right_panel; close(ui); }
+                                    ui.separator();
+                                    if ui.selectable_label(self.perf.visible, "Perf Overlay").clicked() { self.perf.visible = !self.perf.visible; close(ui); }
+                                    ui.separator();
+                                    let is_dark = self.persist.theme == "dark";
+                                    if ui.selectable_label(is_dark,  "Dark").clicked()  { self.persist.theme = "dark".into();  close(ui); }
+                                    if ui.selectable_label(!is_dark, "Light").clicked() { self.persist.theme = "light".into(); close(ui); }
+                                });
                         }
-                    }
-                    for node_id in &wf_actions.toggle {
-                        let _ = self.workflow.toggle_node(*node_id);
-                    }
-                    for node_id in &wf_actions.duplicate {
-                        if let Some(node) = self.workflow.node(*node_id) {
-                            let kind = node.kind;
-                            let payload = node.payload.clone();
-                            let idx = self.workflow.nodes().position(|n| n.id == *node_id);
-                            if let Some(i) = idx {
-                                let _ = self.workflow.insert_node_at(i + 1, kind, payload);
+
+                        ui.add_space(4.0);
+
+                        // ↻ Sorts chip — shown only when sorts are active
+                        if has_sorts {
+                            if ui.add(
+                                egui::Button::new(egui::RichText::new("↻ Sorts").size(11.0).color(icon_col))
+                                    .fill(chip_bg).stroke(egui::Stroke::NONE),
+                            ).on_hover_text("Clear all sorts").clicked() {
+                                self.grid_state.clear_sorts();
+                                if let Some(ids) = &self.workflow_ids {
+                                    let sort_id = ids.sort;
+                                    let _ = self.workflow.update_payload(sort_id, NodePayload::Sort { specs: vec![] });
+                                }
+                                self.viewport.first_row = 0;
+                                self.grid_state.scroll_y = 0.0;
+                                self.fetch_page();
+                            }
+                            ui.add_space(2.0);
+                        }
+
+                        // × Filters chip — shown only when filters are active
+                        if has_filters {
+                            if ui.add(
+                                egui::Button::new(egui::RichText::new("× Filters").size(11.0).color(icon_col))
+                                    .fill(chip_bg).stroke(egui::Stroke::NONE),
+                            ).on_hover_text("Clear all filters").clicked() {
+                                self.grid_state.column_filters.clear();
+                                if let Some(ids) = &self.workflow_ids {
+                                    let filter_id = ids.filter;
+                                    let _ = self.workflow.update_payload(
+                                        filter_id,
+                                        NodePayload::Filter { expr: FilterExpr::None },
+                                    );
+                                }
+                                self.apply_filter();
                             }
                         }
-                    }
-                    for (node_id, new_payload) in wf_actions.settings_changes {
-                        let _ = self.workflow.update_payload(node_id, new_payload);
-                    }
-                    if let Some(kind) = wf_actions.add_modifier {
-                        let payload = match kind {
-                            workflow::NodeKind::Filter => workflow::NodePayload::Filter {
-                                expr: core::FilterExpr::None,
-                            },
-                            workflow::NodeKind::Sort => workflow::NodePayload::Sort {
-                                specs: vec![],
-                            },
-                            workflow::NodeKind::Aggregate => workflow::NodePayload::Empty,
-                            workflow::NodeKind::DerivedColumn => workflow::NodePayload::Empty,
-                            _ => workflow::NodePayload::Empty,
-                        };
-                        let _ = self.workflow.add_node(kind, payload);
-                    }
 
-                    if has_actions {
-                        self.fetch_page();
-                        self.refresh_count();
-                    }
-                } else {
-                    label::muted(ui, "No workflow");
-                }
-            });
-        self.persist.show_workflow_panel = show_workflow;
-
-        // Column Inspector
-        let mut show_inspector = self.persist.show_inspector_panel;
-        egui::Window::new("📊 Column Inspector")
-            .default_pos([1200.0, 100.0])
-            .default_size([260.0, 450.0])
-            .resizable(true)
-            .open(&mut show_inspector)
-            .show(ctx, |ui| {
-                let col_stats = self.inspected_col.as_ref().and_then(|name| {
-                    self.dataset_stats
-                        .as_ref()?
-                        .columns
-                        .iter()
-                        .find(|c| &c.name == name)
+                        // ◨ Inspector sidebar toggle — right-aligned
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.add_space(8.0);
+                            if ui.add(
+                                egui::Button::new(egui::RichText::new("◨").size(14.0).color(
+                                    if self.persist.show_right_panel { accent } else { icon_col }
+                                ))
+                                .fill(egui::Color32::TRANSPARENT)
+                                .stroke(egui::Stroke::NONE)
+                                .min_size(egui::Vec2::new(28.0, 24.0)),
+                            ).clicked() {
+                                self.persist.show_right_panel = !self.persist.show_right_panel;
+                            }
+                        });
+                    });
                 });
-                let col_profile = self.inspected_col.as_ref().and_then(|name| {
-                    self.profile.as_ref()?.column(name)
-                });
-                panels::column_inspector(ui, col_stats, col_profile);
-            });
-        self.persist.show_inspector_panel = show_inspector;
+        }
 
-
-        // ── Central panel: split-view framework ──────────────────────────
+        // ── Fixed side panels ────────────────────────────────────────────────
         //
-        // The LayoutManager owns the layout tree.  We pass view-render
-        // callbacks via ViewContext so the renderer crate stays decoupled
-        // from app-level types.
-        egui::CentralPanel::default().show(ui, |ui: &mut egui::Ui| {
-            // Capture references needed inside closures.
-            let handle = self.handle.clone();
-            let current_batch = self.current_batch.clone();
-            let loading = self.loading;
-            let total_rows = self.total_rows;
-            let batch_start_row = self.viewport.first_row;
-            let document = self.document.clone();
-            let tab_grid_states = &mut self.tab_grid_states;
-            // Borrow separately so we can update every active tab's viewport
-            // each frame — not only on ScrollChanged. This ensures the union
-            // viewport in handle_grid_actions always covers all split panes,
-            // preventing the batch from being shifted away from tabs that
-            // haven't scrolled yet.
-            let tab_viewports = &mut self.tab_viewports;
+        // Left: Navigator (Explorer / Schema / Workflow tabs).
+        // Right: Column Inspector.
 
-            let mut pending_grid_actions: Vec<GridAction> = Vec::new();
-            let mut new_visible_rows: Option<usize> = None;
+        let dark = self.persist.theme == "dark";
 
-            let mut ctx = ViewContext {
-                render_spreadsheet: &mut |ui: &mut egui::Ui, leaf| {
-                    // ── Per-tab grid state (fully isolated, no global clone) ──
-                    let vid = leaf.view_id;
-                    let mut tab_gs = tab_grid_states
-                        .entry(vid)
-                        .or_insert_with(GridState::new)
-                        .clone();
+        let window_bg = if dark { egui::Color32::from_rgb(28, 28, 30) } else { egui::Color32::WHITE };
+        let card_fill  = if dark { egui::Color32::from_rgb(36, 36, 40) } else { egui::Color32::WHITE };
+        // The outer panel frame is window-coloured so the rounded card inside
+        // looks like it floats with a gap on all sides.
+        let sidebar_frame = egui::Frame::new()
+            .fill(window_bg)
+            .inner_margin(egui::Margin::same(0));
+        let card_radius = egui::epaint::CornerRadius::same(10);
+        // Top is flush with the panel so the tab row sits at the same
+        // vertical level as the split-view tab bar.  Sides and bottom
+        // keep the 8 px breathing gap.
+        let card_gap = egui::Margin { top: 0, left: 8, right: 8, bottom: 8 };
+        let card_pad = egui::Margin::same(split_view::BAR_PADDING as i8);
 
-                    if let Some(h) = &handle {
-                        if let Some(batch) = current_batch.clone() {
-                            let height = ui.available_height();
-                            let vis = tab_gs.rows_in_viewport(height);
-                            new_visible_rows = Some(vis);
+        // ── Left: Navigator ─────────────────────────────────────────────────
+        if self.persist.show_left_panel {
+            egui::Panel::left("navigator_panel")
+                .resizable(true)
+                .default_size(400.0)
+                .min_size(200.0)
+                .frame(sidebar_frame)
+                .show_separator_line(false)
+                .show(ui, |ui: &mut egui::Ui| {
+                    egui::Frame::new()
+                        .fill(card_fill)
+                        .corner_radius(card_radius)
+                        .outer_margin(card_gap)
+                        .inner_margin(card_pad)
+                        .show(ui, |ui| {
+                            ui.set_min_height(ui.available_height());
 
-                            // Keep this tab's viewport registered so the union
-                            // viewport in handle_grid_actions covers every active
-                            // pane, even ones that have never emitted ScrollChanged.
-                            let vp = tab_viewports.entry(vid).or_insert_with(Viewport::default);
-                            vp.first_row = tab_gs.first_row();
-                            vp.visible_rows = vis;
+                            // ── Nav tab row — same component as split-view tabs ──
+                            ui.horizontal(|ui| {
+                                let tabs: &[(&str, u8)] = &[
+                                    ("Explorer", 0),
+                                    ("Schema",   1),
+                                    ("Workflow", 2),
+                                ];
+                                for (tab_label, idx) in tabs {
+                                    let selected = self.persist.left_nav_tab == *idx;
+                                    if split_view::tab_button(ui, tab_label, selected) {
+                                        self.persist.left_nav_tab = *idx;
+                                    }
+                                }
+                            });
+                            ui.add_space(4.0);
+                            ui.separator();
+                            ui.add_space(4.0);
 
-                            let actions = GridRenderer::show(
-                                ui, &h.dataset, &batch, &mut tab_gs, total_rows,
-                                vid.0, batch_start_row,
-                            );
-                            pending_grid_actions.extend(actions);
-                        } else if loading {
+                            // ── Content ───────────────────────────────────────
+                            match self.persist.left_nav_tab {
+                                0 => {
+                                    egui::ScrollArea::vertical().show(ui, |ui| {
+                                        crate::explorer::object_explorer(ui, &self.workspace);
+                                    });
+                                }
+                                1 => {
+                                    if let Some(handle) = &self.handle {
+                                        panels::schema_panel(ui, &handle.dataset, self.profile.as_ref());
+                                    } else {
+                                        label::muted(ui, "No dataset loaded.");
+                                    }
+                                }
+                                _ => {
+                                    if self.handle.is_some() {
+                                        let columns: Vec<String> = self.handle.as_ref()
+                                            .map(|h| h.dataset.schema.column_names()
+                                                .iter().map(|s| s.to_string()).collect())
+                                            .unwrap_or_default();
+
+                                        egui::ScrollArea::vertical().show(ui, |ui| {
+                                            let wf_actions = workflow_sidebar::workflow_panel(
+                                                ui,
+                                                &self.workflow,
+                                                &columns,
+                                                &mut self.expanded_modifiers,
+                                            );
+                                            let has_actions = !wf_actions.is_empty();
+
+                                            for node_id in &wf_actions.remove {
+                                                let _ = self.workflow.remove_node(*node_id);
+                                            }
+                                            for node_id in &wf_actions.move_up {
+                                                let pos = self.workflow.nodes().position(|n| n.id == *node_id);
+                                                if let Some(i) = pos { let _ = self.workflow.move_modifier_up(i); }
+                                            }
+                                            for node_id in &wf_actions.move_down {
+                                                let pos = self.workflow.nodes().position(|n| n.id == *node_id);
+                                                if let Some(i) = pos { let _ = self.workflow.move_modifier_down(i); }
+                                            }
+                                            for node_id in &wf_actions.toggle {
+                                                let _ = self.workflow.toggle_node(*node_id);
+                                            }
+                                            for node_id in &wf_actions.duplicate {
+                                                if let Some(node) = self.workflow.node(*node_id) {
+                                                    let kind = node.kind;
+                                                    let payload = node.payload.clone();
+                                                    let pos = self.workflow.nodes().position(|n| n.id == *node_id);
+                                                    if let Some(i) = pos {
+                                                        let _ = self.workflow.insert_node_at(i + 1, kind, payload);
+                                                    }
+                                                }
+                                            }
+                                            for (node_id, new_payload) in wf_actions.settings_changes {
+                                                let _ = self.workflow.update_payload(node_id, new_payload);
+                                            }
+                                            if let Some(kind) = wf_actions.add_modifier {
+                                                let payload = match kind {
+                                                    workflow::NodeKind::Filter => workflow::NodePayload::Filter {
+                                                        expr: core::FilterExpr::None,
+                                                    },
+                                                    workflow::NodeKind::Sort => workflow::NodePayload::Sort { specs: vec![] },
+                                                    _ => workflow::NodePayload::Empty,
+                                                };
+                                                let _ = self.workflow.add_node(kind, payload);
+                                            }
+                                            if has_actions {
+                                                self.fetch_page();
+                                                self.refresh_count();
+                                            }
+                                        });
+                                    } else {
+                                        label::muted(ui, "No workflow.");
+                                    }
+                                }
+                            }
+                        });
+                });
+        }
+
+        // ── Right: Inspector ────────────────────────────────────────────────
+        if self.persist.show_right_panel {
+            egui::Panel::right("inspector_panel")
+                .resizable(true)
+                .default_size(400.0)
+                .min_size(200.0)
+                .frame(sidebar_frame)
+                .show_separator_line(false)
+                .show(ui, |ui: &mut egui::Ui| {
+                    egui::Frame::new()
+                        .fill(card_fill)
+                        .corner_radius(card_radius)
+                        .outer_margin(card_gap)
+                        .inner_margin(card_pad)
+                        .show(ui, |ui| {
+                            ui.set_min_height(ui.available_height());
+                            label::muted(ui, "Inspector");
+                            ui.add_space(4.0);
+                            ui.separator();
+                            ui.add_space(4.0);
+
+                            let col_stats = self.inspected_col.as_ref().and_then(|name| {
+                                self.dataset_stats.as_ref()?.columns.iter().find(|c| &c.name == name)
+                            });
+                            let col_profile = self.inspected_col.as_ref().and_then(|name| {
+                                self.profile.as_ref()?.column(name)
+                            });
+                            panels::column_inspector(ui, col_stats, col_profile);
+                        });
+                });
+        }
+
+
+        // ── Central panel: split-view framework ──────────────────────────────────
+        let panel_fill = if self.persist.theme == "dark" {
+            egui::Color32::from_rgb(28, 28, 30)
+        } else {
+            egui::Color32::WHITE
+        };
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().fill(panel_fill))
+            .show(ui, |ui: &mut egui::Ui| {
+                let handle = self.handle.clone();
+                let current_batch = self.current_batch.clone();
+                let loading = self.loading;
+                let total_rows = self.total_rows;
+                let batch_start_row = self.viewport.first_row;
+                let document = self.document.clone();
+                let tab_grid_states = &mut self.tab_grid_states;
+                let tab_viewports = &mut self.tab_viewports;
+
+                let mut pending_grid_actions: Vec<GridAction> = Vec::new();
+                let mut new_visible_rows: Option<usize> = None;
+                let mut tab_actions: Vec<TabAction> = Vec::new();
+
+                let mut ctx = ViewContext {
+                    render_spreadsheet: &mut |ui: &mut egui::Ui, leaf| {
+                        let vid = leaf.view_id;
+                        let mut tab_gs = tab_grid_states
+                            .entry(vid)
+                            .or_insert_with(GridState::new)
+                            .clone();
+
+                        if let Some(h) = &handle {
+                            if let Some(batch) = current_batch.clone() {
+                                let height = ui.available_height();
+                                let vis = tab_gs.rows_in_viewport(height);
+                                new_visible_rows = Some(vis);
+
+                                let vp = tab_viewports.entry(vid).or_insert_with(Viewport::default);
+                                vp.first_row = tab_gs.first_row();
+                                vp.visible_rows = vis;
+
+                                let actions = GridRenderer::show(
+                                    ui, &h.dataset, &batch, &mut tab_gs, total_rows,
+                                    vid.0, batch_start_row,
+                                );
+                                pending_grid_actions.extend(actions);
+                            } else if loading {
+                                ui.centered_and_justified(|ui| {
+                                    ui.vertical_centered(|ui| {
+                                        ui.add_space(40.0);
+                                        ui.spinner();
+                                        ui.add_space(8.0);
+                                        label::text(ui, "Loading dataset…");
+                                    });
+                                });
+                            }
+                        } else {
                             ui.centered_and_justified(|ui| {
                                 ui.vertical_centered(|ui| {
-                                    ui.add_space(40.0);
-                                    ui.spinner();
-                                    ui.add_space(8.0);
-                                    label::text(ui, "Loading dataset…");
+                                    ui.add_space(60.0);
+                                    label::text(ui, "Split Office");
+                                    label::muted(ui, "Research Prototype");
+                                    ui.add_space(20.0);
+                                    label::text(ui, "Drop a Parquet or CSV file here");
+                                    label::muted(ui, "or click Open in the toolbar");
                                 });
                             });
                         }
-                    } else {
-                        ui.centered_and_justified(|ui| {
-                            ui.vertical_centered(|ui| {
-                                ui.add_space(60.0);
-                                label::text(ui, "Split Office");
-                                label::muted(ui, "Research Prototype");
-                                ui.add_space(20.0);
-                                label::text(ui, "▶  Drop a Parquet or CSV file here");
-                                label::muted(ui, "or click Open File above");
-                            });
-                        });
-                    }
 
-                    // ── Save per-tab state ──────────────────────────────
-                    if let Some(stored) = tab_grid_states.get_mut(&vid) {
-                        *stored = tab_gs;
-                    }
-                },
-                render_document: &mut |ui: &mut egui::Ui, _leaf| {
-                    document_view::render_document(ui, &document);
-                },
-            };
+                        if let Some(stored) = tab_grid_states.get_mut(&vid) {
+                            *stored = tab_gs;
+                        }
+                    },
+                    render_document: &mut |ui: &mut egui::Ui, leaf| {
+                        document_view::render_document(ui, &document, leaf.view_id.0);
+                    },
+                    tab_left:  None,
+                    tab_right: None,
+                };
 
-            let mut tab_actions: Vec<TabAction> = Vec::new();
-            split_view::render_layout(ui, &mut self.layout_mgr, &mut ctx, &mut tab_actions);
+                split_view::render_layout(ui, &mut self.layout_mgr, &mut ctx, &mut tab_actions);
 
-            // Apply grid actions collected from inside the closure.
-            if let Some(vr) = new_visible_rows {
-                self.viewport.visible_rows = vr;
-            }
-            self.handle_grid_actions(pending_grid_actions);
-
-            // Apply tab actions.
-            self.handle_tab_actions(tab_actions);
-        });
+                if let Some(vr) = new_visible_rows { self.viewport.visible_rows = vr; }
+                self.handle_grid_actions(pending_grid_actions);
+                self.handle_tab_actions(tab_actions);
+            });
 
         // Performance overlay (always on top).
         self.perf.show(ui.ctx());
@@ -1048,16 +1084,42 @@ impl eframe::App for SplitOfficeApp {
 
 fn dark_visuals() -> egui::Visuals {
     let mut v = egui::Visuals::dark();
-    v.override_text_color = Some(egui::Color32::from_rgb(220, 220, 230));
-    v.window_fill = egui::Color32::from_rgb(14, 14, 20);
-    v.panel_fill = egui::Color32::from_rgb(14, 14, 20);
+    v.override_text_color = Some(egui::Color32::from_rgb(242, 242, 247));
+    v.window_fill = egui::Color32::from_rgb(28, 28, 30);
+    v.panel_fill = egui::Color32::from_rgb(28, 28, 30);
+    v.faint_bg_color = egui::Color32::from_rgb(36, 36, 38);
+    v.extreme_bg_color = egui::Color32::from_rgb(18, 18, 20);
+    let sep = egui::Color32::from_rgb(54, 54, 56);
+    v.widgets.noninteractive.bg_stroke = egui::Stroke::new(0.5, sep);
+    v.widgets.inactive.bg_stroke = egui::Stroke::new(0.5, sep);
+    v.widgets.hovered.bg_stroke = egui::Stroke::new(0.5, egui::Color32::from_rgb(80, 80, 88));
+    v.widgets.active.bg_stroke = egui::Stroke::new(0.5, egui::Color32::from_rgb(100, 100, 110));
+    v.selection.bg_fill = egui::Color32::from_rgba_premultiplied(10, 132, 255, 60);
+    let r = egui::epaint::CornerRadius::same(5);
+    v.widgets.inactive.corner_radius = r;
+    v.widgets.hovered.corner_radius = r;
+    v.widgets.active.corner_radius = r;
+    v.widgets.open.corner_radius = r;
     v
 }
 
 fn light_visuals() -> egui::Visuals {
     let mut v = egui::Visuals::light();
-    v.override_text_color = Some(egui::Color32::from_rgb(30, 30, 40));
-    v.window_fill = egui::Color32::from_rgb(248, 248, 252);
-    v.panel_fill = egui::Color32::from_rgb(245, 245, 250);
+    v.override_text_color = Some(egui::Color32::from_rgb(0, 0, 0));
+    v.window_fill = egui::Color32::WHITE;
+    v.panel_fill = egui::Color32::WHITE;
+    v.faint_bg_color = egui::Color32::from_rgb(242, 242, 247);
+    v.extreme_bg_color = egui::Color32::from_rgb(242, 242, 247);
+    let sep = egui::Color32::from_rgb(196, 196, 200);
+    v.widgets.noninteractive.bg_stroke = egui::Stroke::new(0.5, sep);
+    v.widgets.inactive.bg_stroke = egui::Stroke::new(0.5, sep);
+    v.widgets.hovered.bg_stroke = egui::Stroke::new(0.5, egui::Color32::from_rgb(160, 160, 168));
+    v.widgets.active.bg_stroke = egui::Stroke::new(0.5, egui::Color32::from_rgb(130, 130, 140));
+    v.selection.bg_fill = egui::Color32::from_rgba_premultiplied(0, 122, 255, 55);
+    let r = egui::epaint::CornerRadius::same(5);
+    v.widgets.inactive.corner_radius = r;
+    v.widgets.hovered.corner_radius = r;
+    v.widgets.active.corner_radius = r;
+    v.widgets.open.corner_radius = r;
     v
 }

@@ -22,7 +22,7 @@
 //! - No frame drops: hidden tabs are completely skipped.
 
 use egui::{
-    Color32, CursorIcon, Layout, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, UiBuilder, Vec2,
+    Color32, CursorIcon, Layout, Pos2, Rect, Sense, Ui, UiBuilder, Vec2,
 };
 
 use crate::layout::{LeafView, LayoutNode, SplitNode, TabContainer, ViewId};
@@ -56,6 +56,23 @@ pub enum TabAction {
 pub struct ViewContext<'a> {
     pub render_spreadsheet: &'a mut dyn FnMut(&mut Ui, &LeafView),
     pub render_document:    &'a mut dyn FnMut(&mut Ui, &LeafView),
+    /// Optional toolbar prefix rendered at the left edge of the leftmost tab bar row.
+    pub tab_left:  Option<&'a mut dyn FnMut(&mut Ui)>,
+    /// Optional toolbar suffix rendered at the right edge of the rightmost tab bar row.
+    /// Rendered in right-to-left order (add items right-to-left: rightmost first).
+    pub tab_right: Option<&'a mut dyn FnMut(&mut Ui)>,
+}
+
+/// Which edges of the unified header this node owns.
+#[derive(Clone, Copy)]
+struct RenderEdge {
+    left:  bool,
+    right: bool,
+}
+
+impl RenderEdge {
+    const BOTH: Self = Self { left: true, right: true };
+    const NONE: Self = Self { left: false, right: false };
 }
 
 /// Top-level entry point.  Call this once per frame from `eframe::App::ui`.
@@ -69,16 +86,58 @@ pub fn render_layout(
     tab_actions: &mut Vec<TabAction>,
 ) {
     let rect = ui.available_rect_before_wrap();
-    render_node(ui, &mut mgr.root, &mut mgr.focus.focused, rect, ctx, tab_actions);
+    render_node(ui, &mut mgr.root, &mut mgr.focus.focused, rect, ctx, tab_actions, RenderEdge::BOTH);
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DIVIDER_THICKNESS: f32 = 4.0;
-const TAB_HEIGHT: f32 = 28.0;
-const TAB_CLOSE_SIZE: f32 = 14.0;
-const TAB_PLUS_SIZE: f32 = 18.0;
-const FOCUS_BORDER_WIDTH: f32 = 1.5;
+/// Uniform padding applied on all four sides of both the toolbar bar (in the
+/// host app) and the tab bars (in the split-view renderer).  A single source of
+/// truth: change this and both components update together.
+pub const BAR_PADDING: f32 = 8.0;
+
+const DIVIDER_THICKNESS: f32  = 1.0;
+/// Height of the tab content (text + active pill), excluding vertical padding.
+const TAB_HEIGHT: f32         = 28.0;
+/// Full height of the tab bar = content + equal top/bottom padding.
+const TAB_BAR_HEIGHT: f32     = TAB_HEIGHT + 2.0 * BAR_PADDING;
+const TAB_CLOSE_SIZE: f32     = 14.0;
+const TAB_PLUS_SIZE: f32      = 18.0;
+
+// ── Public tab widget ─────────────────────────────────────────────────────────
+
+/// Render one tab label in the canonical split-view style and return whether it
+/// was clicked.
+///
+/// Use this wherever a row of tabs is needed (side-panel nav, split-view bar,
+/// etc.) so every tab in the application has identical typography and interaction.
+pub fn tab_button(ui: &mut Ui, label: &str, is_selected: bool) -> bool {
+    let text_color = if is_selected { tab_active_text(ui) } else { tab_inactive_text(ui) };
+
+    let galley = ui.painter().layout_no_wrap(
+        label.to_owned(),
+        egui::FontId::proportional(12.0),
+        text_color,
+    );
+    let tab_w = galley.size().x + 12.0; // 6 px padding each side, no close button
+
+    let (_, tab_rect) = ui.allocate_space(Vec2::new(tab_w, TAB_HEIGHT));
+
+    if is_selected {
+        let active_rect = tab_rect.shrink2(Vec2::new(1.0, 2.5));
+        ui.painter().rect_filled(active_rect, 4.0, tab_active_bg(ui));
+    }
+
+    let resp = ui.allocate_rect(tab_rect, Sense::click());
+
+    let text_pos = Pos2::new(
+        tab_rect.min.x + 6.0,
+        tab_rect.center().y - galley.size().y / 2.0,
+    );
+    ui.painter().galley(text_pos, galley, text_color);
+
+    resp.clicked()
+}
 
 // ── Theme-aware colours ───────────────────────────────────────────────────────
 
@@ -86,55 +145,48 @@ fn is_dark(ui: &Ui) -> bool {
     ui.visuals().dark_mode
 }
 
-fn focus_border_color() -> Color32 {
-    Color32::from_rgb(80, 140, 255)
-}
 
 fn tab_bar_bg(ui: &Ui) -> Color32 {
     if is_dark(ui) {
-        Color32::from_gray(30)
+        Color32::from_rgb(28, 28, 30)
     } else {
-        Color32::from_rgb(225, 225, 232)
+        Color32::WHITE
     }
 }
 
 fn tab_active_bg(ui: &Ui) -> Color32 {
     if is_dark(ui) {
-        Color32::from_gray(55)
+        Color32::from_rgb(50, 50, 54)
     } else {
-        Color32::from_rgb(245, 245, 252)
+        Color32::from_rgb(228, 228, 234)
     }
 }
 
 fn tab_active_text(ui: &Ui) -> Color32 {
     if is_dark(ui) {
-        Color32::from_gray(230)
+        Color32::from_rgb(242, 242, 247)
     } else {
-        Color32::from_rgb(20, 20, 35)
+        Color32::from_rgb(0, 0, 0)
     }
 }
 
 fn tab_inactive_text(ui: &Ui) -> Color32 {
     if is_dark(ui) {
-        Color32::from_gray(160)
+        Color32::from_rgb(142, 142, 147)
     } else {
-        Color32::from_rgb(130, 130, 150)
+        Color32::from_rgb(110, 110, 118)
     }
 }
 
-fn divider_color(ui: &Ui) -> Color32 {
-    if is_dark(ui) {
-        Color32::from_gray(50)
-    } else {
-        Color32::from_rgb(200, 200, 212)
-    }
+fn divider_color(_ui: &Ui) -> Color32 {
+    Color32::TRANSPARENT
 }
 
 fn divider_hover_color(ui: &Ui) -> Color32 {
     if is_dark(ui) {
-        Color32::from_gray(90)
+        Color32::from_rgb(90, 90, 96)
     } else {
-        Color32::from_rgb(160, 160, 180)
+        Color32::from_rgb(150, 150, 162)
     }
 }
 
@@ -161,12 +213,13 @@ fn render_node(
     rect: Rect,
     ctx: &mut ViewContext<'_>,
     tab_actions: &mut Vec<TabAction>,
+    edge: RenderEdge,
 ) {
     match node {
         LayoutNode::Leaf(leaf) => render_leaf(ui, leaf, focused, rect, ctx),
-        LayoutNode::HSplit(split) => render_hsplit(ui, split, focused, rect, ctx, tab_actions),
-        LayoutNode::VSplit(split) => render_vsplit(ui, split, focused, rect, ctx, tab_actions),
-        LayoutNode::Tabs(tabs) => render_tabs(ui, tabs, focused, rect, ctx, tab_actions),
+        LayoutNode::HSplit(split) => render_hsplit(ui, split, focused, rect, ctx, tab_actions, edge),
+        LayoutNode::VSplit(split) => render_vsplit(ui, split, focused, rect, ctx, tab_actions, edge),
+        LayoutNode::Tabs(tabs) => render_tabs(ui, tabs, focused, rect, ctx, tab_actions, edge),
     }
 }
 
@@ -189,28 +242,15 @@ fn render_leaf(
     rect: Rect,
     ctx: &mut ViewContext<'_>,
 ) {
-    let is_focused = *focused == Some(leaf.view_id);
-
     let focus_response = ui.allocate_rect(rect, Sense::click());
     if focus_response.clicked() {
         *focused = Some(leaf.view_id);
     }
 
-    if is_focused {
-        ui.painter().rect_stroke(
-            rect.shrink(1.0),
-            0.0,
-            Stroke::new(FOCUS_BORDER_WIDTH, focus_border_color()),
-            StrokeKind::Outside,
-        );
-    }
+    // Guarantee no dark bleed-through when views don't fill their rect.
+    ui.painter().rect_filled(rect, 0.0, ui.visuals().panel_fill);
 
-    let inner_rect = if is_focused {
-        rect.shrink(FOCUS_BORDER_WIDTH + 0.5)
-    } else {
-        rect
-    };
-    let mut child = child_ui_at(ui, inner_rect);
+    let mut child = child_ui_at(ui, rect);
     dispatch_view(&mut child, leaf, ctx);
 }
 
@@ -230,6 +270,7 @@ fn render_hsplit(
     rect: Rect,
     ctx: &mut ViewContext<'_>,
     tab_actions: &mut Vec<TabAction>,
+    edge: RenderEdge,
 ) {
     let total_h = rect.height();
     let divider_y = rect.min.y + total_h * split.ratio;
@@ -244,9 +285,11 @@ fn render_hsplit(
         rect.max,
     );
 
-    render_node(ui, &mut split.first, focused, first_rect, ctx, tab_actions);
+    // Top pane spans full width → inherits both edges.
+    // Bottom pane gets no toolbar (avoids duplicate prefix/suffix).
+    render_node(ui, &mut split.first,  focused, first_rect,  ctx, tab_actions, edge);
     render_divider(ui, split, divider_rect, DividerAxis::Horizontal, rect);
-    render_node(ui, &mut split.second, focused, second_rect, ctx, tab_actions);
+    render_node(ui, &mut split.second, focused, second_rect, ctx, tab_actions, RenderEdge::NONE);
 }
 
 // ── VSplit (left / right) ─────────────────────────────────────────────────────
@@ -258,6 +301,7 @@ fn render_vsplit(
     rect: Rect,
     ctx: &mut ViewContext<'_>,
     tab_actions: &mut Vec<TabAction>,
+    edge: RenderEdge,
 ) {
     let total_w = rect.width();
     let divider_x = rect.min.x + total_w * split.ratio;
@@ -272,9 +316,12 @@ fn render_vsplit(
         rect.max,
     );
 
-    render_node(ui, &mut split.first, focused, first_rect, ctx, tab_actions);
+    // Left pane gets the left prefix; right pane gets the right suffix.
+    render_node(ui, &mut split.first,  focused, first_rect,  ctx, tab_actions,
+        RenderEdge { left: edge.left, right: false });
     render_divider(ui, split, divider_rect, DividerAxis::Vertical, rect);
-    render_node(ui, &mut split.second, focused, second_rect, ctx, tab_actions);
+    render_node(ui, &mut split.second, focused, second_rect, ctx, tab_actions,
+        RenderEdge { left: false, right: edge.right });
 }
 
 // ── Divider ───────────────────────────────────────────────────────────────────
@@ -338,14 +385,18 @@ fn render_tabs(
     rect: Rect,
     ctx: &mut ViewContext<'_>,
     tab_actions: &mut Vec<TabAction>,
+    edge: RenderEdge,
 ) {
     let gid = group_id(tabs);
 
-    let tab_bar_rect = Rect::from_min_size(rect.min, Vec2::new(rect.width(), TAB_HEIGHT));
+    let tab_bar_rect = Rect::from_min_size(rect.min, Vec2::new(rect.width(), TAB_BAR_HEIGHT));
     let content_rect = Rect::from_min_max(
-        Pos2::new(rect.min.x, rect.min.y + TAB_HEIGHT),
+        Pos2::new(rect.min.x, rect.min.y + TAB_BAR_HEIGHT),
         rect.max,
     );
+    // Inner rect — strips the uniform padding so that the tab content sits
+    // centred with equal breathing room on all four sides.
+    let tab_inner_rect = tab_bar_rect.shrink2(Vec2::splat(BAR_PADDING));
 
     // ── Persistent popup state (survives across frames) ────────────────
     let plus_state_id = egui::Id::new(format!("plus_state_{:?}", gid));
@@ -374,124 +425,138 @@ fn render_tabs(
         ui.ctx().data_mut(|d| d.insert_temp(plus_just_opened_id, val));
     };
 
-    // Draw tab bar background.
+    // Draw tab bar background (covers the full bar including padding).
     ui.painter().rect_filled(tab_bar_rect, 0.0, tab_bar_bg(ui));
 
-    // ── Tab bar layout ──────────────────────────────────────────────────
-    let mut tab_ui = child_ui_at(ui, tab_bar_rect);
+    // Is the pointer anywhere inside the full tab bar?  Used to reveal the + button.
+    let bar_hovered = ui.ctx().input(|i| {
+        i.pointer.hover_pos().map_or(false, |p| tab_bar_rect.contains(p))
+    });
+
+    // ── Tab bar layout — use the inset rect so tabs are vertically centred ──
+    let mut tab_ui = child_ui_at(ui, tab_inner_rect);
 
     tab_ui.horizontal(|ui: &mut Ui| {
-        ui.add_space(4.0);
+        // ── Left toolbar prefix (sidebar toggle + View/Open pill) ──────
+        if edge.left {
+            if let Some(f) = ctx.tab_left.as_mut() { f(ui); }
+        }
 
-        for (i, tab) in tabs.tabs.iter().enumerate() {
-            let is_active = i == tabs.active_tab;
+        // ── Tab labels — hidden when there is only one tab ──────────────
+        let multi_tab = tabs.tabs.len() > 1;
+        if multi_tab {
+            ui.add_space(4.0);
+        }
 
-            let label = format!("{} {}", tab.view_type.icon(), tab.title);
-            let text_color = if is_active {
+        if multi_tab {
+            for (i, tab) in tabs.tabs.iter().enumerate() {
+                let is_active = i == tabs.active_tab;
+
+                let label = tab.title.clone();
+                let text_color = if is_active { tab_active_text(ui) } else { tab_inactive_text(ui) };
+
+                let galley = ui.painter().layout_no_wrap(
+                    label.clone(),
+                    egui::FontId::proportional(12.0),
+                    text_color,
+                );
+                let text_w = galley.size().x;
+                let tab_w  = text_w + TAB_CLOSE_SIZE + 4.0 + 12.0;
+
+                let (_, tab_rect) = ui.allocate_space(Vec2::new(tab_w, TAB_HEIGHT));
+
+                if is_active {
+                    let active_rect = tab_rect.shrink2(egui::Vec2::new(1.0, 2.5));
+                    ui.painter().rect_filled(active_rect, 4.0, tab_active_bg(ui));
+                }
+
+                let tab_resp = ui.allocate_rect(tab_rect, Sense::click());
+
+                if tab_resp.clicked_by(egui::PointerButton::Secondary) {
+                    let pos = tab_resp.interact_pointer_pos().unwrap_or(tab_rect.center());
+                    ctx_open_data = Some((i, pos));
+                    save_ctx(Some((i, pos)), ui);
+                    continue;
+                }
+
+                let hovered       = tab_resp.hovered();
+                let hover_in_close = hovered && tab_resp.hover_pos()
+                    .map_or(false, |p| p.x >= tab_rect.max.x - TAB_CLOSE_SIZE - 4.0);
+                let in_close_zone  = tab_resp.clicked() && tab_resp.interact_pointer_pos()
+                    .map_or(false, |p| p.x >= tab_rect.max.x - TAB_CLOSE_SIZE - 4.0);
+
+                if in_close_zone {
+                    tab_actions.push(TabAction::CloseTab { group_id: gid, tab_index: i });
+                    continue;
+                }
+                if tab_resp.clicked() {
+                    tabs.active_tab = i;
+                    *focused = Some(tab.view_id);
+                }
+
+                let text_pos = Pos2::new(
+                    tab_rect.min.x + 6.0,
+                    tab_rect.center().y - galley.size().y / 2.0,
+                );
+                ui.painter().galley(text_pos, galley, text_color);
+
+                if hovered {
+                    let close_color = close_btn_color(ui, hover_in_close);
+                    ui.painter().text(
+                        Pos2::new(tab_rect.max.x - TAB_CLOSE_SIZE / 2.0 - 2.0, tab_rect.center().y),
+                        egui::Align2::CENTER_CENTER,
+                        "×",
+                        egui::FontId::proportional(13.0),
+                        close_color,
+                    );
+                }
+
+                ui.add_space(2.0);
+            }
+        }
+
+        // ── + New Tab button — space always allocated; drawn only on hover ──
+        // Keeping the allocation prevents toolbar items from jumping on hover.
+        let show_plus = bar_hovered || plus_open;
+        let (_, plus_alloc) = ui.allocate_space(Vec2::new(TAB_PLUS_SIZE + 4.0, TAB_HEIGHT));
+        if show_plus {
+            let plus_btn_rect = Rect::from_center_size(
+                Pos2::new(plus_alloc.min.x + TAB_PLUS_SIZE / 2.0, plus_alloc.center().y),
+                Vec2::new(TAB_PLUS_SIZE, TAB_PLUS_SIZE),
+            );
+            let plus_resp  = ui.interact(plus_btn_rect, ui.next_auto_id(), Sense::click());
+            let plus_color = if plus_resp.hovered() || plus_open {
                 tab_active_text(ui)
             } else {
                 tab_inactive_text(ui)
             };
-
-            let galley = ui.painter().layout_no_wrap(
-                label.clone(),
-                egui::FontId::proportional(12.0),
-                text_color,
+            ui.painter().text(
+                plus_btn_rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "+",
+                egui::FontId::proportional(16.0),
+                plus_color,
             );
-            let text_w = galley.size().x;
-            let close_w = if tabs.tabs.len() > 1 { TAB_CLOSE_SIZE + 4.0 } else { 4.0 };
-            let tab_w = text_w + close_w + 12.0;
-
-            let (_, tab_rect) = ui.allocate_space(Vec2::new(tab_w, TAB_HEIGHT));
-
-            if is_active {
-                ui.painter().rect_filled(tab_rect, 2.0, tab_active_bg(ui));
-            }
-
-            // ── Unified click detection for the whole tab ──────────────
-            let tab_resp = ui.allocate_rect(tab_rect, Sense::click());
-
-            if tab_resp.clicked_by(egui::PointerButton::Secondary) {
-                let pos = tab_resp.interact_pointer_pos().unwrap_or(tab_rect.center());
-                ctx_open_data = Some((i, pos));
-                save_ctx(Some((i, pos)), ui);
-                continue;
-            }
-
-            // Check if click was in the close zone (right edge)
-            let in_close_zone = tabs.tabs.len() > 1 && tab_resp.clicked() && {
-                tab_resp.interact_pointer_pos()
-                    .map_or(false, |p| p.x >= tab_rect.max.x - TAB_CLOSE_SIZE - 4.0)
-            };
-
-            if in_close_zone {
-                tab_actions.push(TabAction::CloseTab { group_id: gid, tab_index: i });
-                continue;
-            }
-
-            if tab_resp.clicked() {
-                tabs.active_tab = i;
-                *focused = Some(tab.view_id);
-            }
-
-            // Draw text
-            let text_pos = Pos2::new(
-                tab_rect.min.x + 6.0,
-                tab_rect.center().y - galley.size().y / 2.0,
-            );
-            ui.painter().galley(text_pos, galley, text_color);
-
-            // Close × decoration
-            if tabs.tabs.len() > 1 {
-                let cx = tab_rect.max.x - TAB_CLOSE_SIZE / 2.0 - 2.0;
-                let cy = tab_rect.center().y;
-                let close_color = if tab_resp.hovered() && tab_resp.hover_pos().map_or(false, |p| p.x >= tab_rect.max.x - TAB_CLOSE_SIZE - 4.0) {
-                    close_btn_color(ui, true)
+            if plus_resp.clicked() {
+                if plus_open {
+                    plus_open = false;
+                    save_plus(false, ui);
                 } else {
-                    close_btn_color(ui, false)
-                };
-                ui.painter().text(
-                    Pos2::new(cx, cy),
-                    egui::Align2::CENTER_CENTER,
-                    "×",
-                    egui::FontId::proportional(13.0),
-                    close_color,
-                );
+                    plus_open = true;
+                    save_plus(true, ui);
+                    save_plus_just_opened(true, ui);
+                    ctx_open_data = None;
+                    save_ctx(None, ui);
+                }
             }
-
-            ui.add_space(2.0);
         }
 
-        // ── + New Tab button ──────────────────────────────────────────
-        let (_, plus_alloc) = ui.allocate_space(Vec2::new(TAB_PLUS_SIZE + 4.0, TAB_HEIGHT));
-        let plus_btn_rect = Rect::from_center_size(
-            Pos2::new(plus_alloc.min.x + TAB_PLUS_SIZE / 2.0, plus_alloc.center().y),
-            Vec2::new(TAB_PLUS_SIZE, TAB_PLUS_SIZE),
-        );
-        let plus_resp = ui.interact(plus_btn_rect, ui.next_auto_id(), Sense::click());
-        let plus_color = if plus_resp.hovered() || plus_open {
-            tab_active_text(ui)
-        } else {
-            tab_inactive_text(ui)
-        };
-        ui.painter().text(
-            plus_btn_rect.center(),
-            egui::Align2::CENTER_CENTER,
-            "+",
-            egui::FontId::proportional(16.0),
-            plus_color,
-        );
-        if plus_resp.clicked() {
-            if plus_open {
-                plus_open = false;
-                save_plus(false, ui);
-            } else {
-                plus_open = true;
-                save_plus(true, ui);
-                save_plus_just_opened(true, ui);
-                ctx_open_data = None;
-                save_ctx(None, ui);
-            }
+        // ── Right toolbar suffix (dataset info + inspector toggle) ──────
+        // Hidden while ghost-tab picker is open to avoid overlap.
+        if edge.right && !plus_open {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if let Some(f) = ctx.tab_right.as_mut() { f(ui); }
+            });
         }
 
         // ── Inline ghost tabs (shown when + is active) ─────────────────

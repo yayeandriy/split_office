@@ -12,8 +12,13 @@ fn dc(dark: bool, d: (u8,u8,u8), l: (u8,u8,u8)) -> egui::Color32 {
 }
 
 /// Render a full document into the egui UI.
-pub fn render_document(ui: &mut egui::Ui, doc: &Document) {
-    egui::ScrollArea::vertical().show(ui, |ui| {
+///
+/// `view_id` must be a stable, unique identifier for this tab (e.g. `leaf.view_id.0`).
+/// It is used as the `ScrollArea` salt so that multiple doc tabs never share the same ID.
+pub fn render_document(ui: &mut egui::Ui, doc: &Document, view_id: u64) {
+    egui::ScrollArea::vertical()
+        .id_salt(egui::Id::new(("doc_scroll", view_id)))
+        .show(ui, |ui| {
         // ── Document title ────────────────────────────────────────────────
         ui.heading(&doc.name);
         ui.separator();

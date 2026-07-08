@@ -18,22 +18,22 @@
 //! Do NOT create visual hierarchy by changing font size or weight ad-hoc.
 //! Use spacing and structure (separators, indentation) first.
 
-use egui::{Color32, RichText, Ui};
+use egui::{Color32, FontId, Rect, RichText, Ui};
 
 // ── Colour tokens ─────────────────────────────────────────────────────────────
 // All colours must be defined here — never inline at call sites.
 // Theme-aware: picks dark/light variant based on ui.visuals().dark_mode.
 
 fn color_text(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(220, 220, 230) } else { Color32::from_rgb(30, 30, 50) }
+    if dark { Color32::from_rgb(242, 242, 247) } else { Color32::from_rgb(0, 0, 0) }
 }
 
 fn color_muted(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(120, 120, 145) } else { Color32::from_rgb(120, 120, 145) }
+    if dark { Color32::from_rgb(142, 142, 147) } else { Color32::from_rgb(110, 110, 118) }
 }
 
 fn color_mono(dark: bool) -> Color32 {
-    if dark { Color32::from_rgb(160, 210, 255) } else { Color32::from_rgb(20, 80, 180) }
+    if dark { Color32::from_rgb(94, 158, 255) } else { Color32::from_rgb(0, 102, 204) }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -67,4 +67,28 @@ pub fn section(ui: &mut Ui, s: impl Into<String>) {
     let dark = ui.visuals().dark_mode;
     ui.label(RichText::new(s).color(color_text(dark)));
     ui.separator();
+}
+
+/// Paint a single glyph optically centred inside `rect`.
+///
+/// `painter.text(…, Align2::CENTER_CENTER, …)` centres on the font's full
+/// line-height box (ascent + descent). For glyphs with no descenders (≡, ◨, ◧,
+/// ⊟, …) this pulls the visual glyph above the true midpoint.
+///
+/// This function uses `Galley::mesh_bounds` — the tight rect around the actual
+/// rendered pixels — so the glyph is always visually centred regardless of
+/// descender space.
+pub fn paint_icon_centered(ui: &Ui, rect: Rect, icon: &str, font_id: FontId, color: Color32) {
+    let galley = ui.ctx().fonts_mut(|f| {
+        f.layout_no_wrap(icon.to_owned(), font_id.clone(), color)
+    });
+    // mesh_bounds is the tight pixel bounding box of the rendered glyphs.
+    // Paint the galley at a position that aligns mesh_bounds.center() with rect.center().
+    let paint_pos = if galley.mesh_bounds != egui::Rect::NOTHING {
+        rect.center() - galley.mesh_bounds.center().to_vec2()
+    } else {
+        // Fallback: use the full galley rect (good enough for ASCII).
+        rect.center() - galley.rect.size() * 0.5
+    };
+    ui.painter().galley(paint_pos, galley, color);
 }
