@@ -11,22 +11,38 @@ fn dc(dark: bool, d: (u8,u8,u8), l: (u8,u8,u8)) -> egui::Color32 {
     if dark { egui::Color32::from_rgb(d.0, d.1, d.2) } else { egui::Color32::from_rgb(l.0, l.1, l.2) }
 }
 
+/// Horizontal padding on each side (px).
+const X_PAD: f32 = 100.0;
+/// Top padding above the document title (px).
+const TOP_PAD: f32 = 100.0;
+
 /// Render a full document into the egui UI.
 ///
 /// `view_id` must be a stable, unique identifier for this tab (e.g. `leaf.view_id.0`).
 /// It is used as the `ScrollArea` salt so that multiple doc tabs never share the same ID.
 pub fn render_document(ui: &mut egui::Ui, doc: &Document, view_id: u64) {
+    // Clamp padding so it never exceeds 25 % of available width.
+    let x_pad = X_PAD.min(ui.available_width() * 0.25);
+
     egui::ScrollArea::vertical()
         .id_salt(egui::Id::new(("doc_scroll", view_id)))
         .show(ui, |ui| {
-        // ── Document title ────────────────────────────────────────────────
-        ui.heading(&doc.name);
-        ui.separator();
+            egui::Frame::new()
+                .inner_margin(egui::Margin {
+                    left:   x_pad as i8,
+                    right:  x_pad as i8,
+                    top:    TOP_PAD as i8,
+                    bottom: TOP_PAD as i8,
+                })
+                .show(ui, |ui| {
+                    ui.heading(&doc.name);
+                    ui.separator();
 
-        for section in &doc.sections {
-            render_section(ui, section);
-        }
-    });
+                    for section in &doc.sections {
+                        render_section(ui, section);
+                    }
+                });
+        });
 }
 
 fn render_section(ui: &mut egui::Ui, section: &document_core::Section) {
